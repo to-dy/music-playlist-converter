@@ -13,3 +13,14 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# Mac OS X files
+.DS_Store
+
+# env files
+.env
+
+
+# air files - Live reload for Go apps
+/tmp
+.air.toml
