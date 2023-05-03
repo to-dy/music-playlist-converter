@@ -1,4 +1,4 @@
-package services
+package spotify
 
 import (
 	"fmt"
@@ -22,7 +22,35 @@ type tokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 
-func GetSpotifyAccessToken() {
+type Track struct {
+	Album    Album    `json:"album"`
+	Artists  []Artist `json:"artists"`
+	Duration int      `json:"duration_ms"`
+	IsLocal  bool     `json:"is_local"`
+	Name     string   `json:"name"`
+}
+
+type Album struct {
+	AlbumType string `json:"album_type"`
+	Name      string `json:"name"`
+}
+
+type Artist struct {
+	Name string `json:"name"`
+}
+
+type PlaylistTracksResponse struct {
+	Items []struct {
+		Track Track `json:"track"`
+	} `json:"items"`
+	Limit    int    `json:"limit"`
+	Next     string `json:"next"`
+	Offset   int    `json:"offset"`
+	Previous string `json:"previous"`
+	Total    int    `json:"total"`
+}
+
+func GetAccessToken() {
 	cli := fiber.Client{}
 
 	// set form request body
@@ -50,13 +78,13 @@ func GetSpotifyAccessToken() {
 
 }
 
-func GetSpotifyPlaylistTracks(id string) {
+func GetPlaylistTracks(id string) {
 	cli := fiber.Client{}
 
 	_, tokenValid := tokenstore.GlobalTokenStore.GetToken("spotify")
 
 	if !tokenValid {
-		GetSpotifyAccessToken()
+		GetAccessToken()
 	}
 
 	token, _ := tokenstore.GlobalTokenStore.GetToken("spotify")
@@ -64,7 +92,12 @@ func GetSpotifyPlaylistTracks(id string) {
 	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"/tracks?fields=total,limit,next,offset,previous,items(track(name,is_local,duration_ms,album(album_type,name),artists(name)))&limit=3").
 		Set("Authorization", "Bearer "+token).Debug()
 
-	res.String()
+	var bodyData PlaylistTracksResponse
+	_, _, errs := res.Struct(&bodyData)
+
+	if errs != nil {
+		log.Panic(errs)
+	}
 
 }
 
