@@ -24,3 +24,6 @@
 # air files - Live reload for Go apps
 /tmp
 .air.toml
+
+# vscode workspace settings
+.vscode
