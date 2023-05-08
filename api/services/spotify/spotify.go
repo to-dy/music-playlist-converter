@@ -8,18 +8,31 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
+	grantTypes "github.com/to-dy/music-playlist-converter/api/services"
 	"github.com/to-dy/music-playlist-converter/api/stores/tokenstore"
 )
 
 var spotifyBaseURL = "https://api.spotify.com/v1"
 
+type SpotifyTokenName string
+
+const (
+	SPOTIFY_AC SpotifyTokenName = "spotify_ac"
+	SPOTIFY_CC SpotifyTokenName = "spotify_cc"
+)
+
 type tokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
-	ExpiresIn   int    `json:"expires_in"`
+	ExpiresIn   int64  `json:"expires_in"`
+
+	// comes only with authorization code flow
+	Scope        *string `json:"scope"`
+	RefreshToken *string `json:"refresh_token"`
 }
 
 type Track struct {
@@ -50,44 +63,77 @@ type PlaylistTracksResponse struct {
 	Total    int    `json:"total"`
 }
 
-func GetAccessToken() {
+func FetchAccessToken(code ...string) {
 	cli := fiber.Client{}
-
-	// set form request body
 	args := fiber.AcquireArgs()
-	args.Set("grant_type", "client_credentials")
-	args.Set("client_id", os.Getenv("SPOTIFY_CLIENT_ID"))
-	args.Set("client_secret", os.Getenv("SPOTIFY_CLIENT_SECRET"))
 
-	// make form request nad use Debug to log request and response details
-	res := cli.Post("https://accounts.spotify.com/api/token").Form(args).Debug()
+	// no code provided meaning its a client_credential grant request
+	if len(code) == 0 {
+		// set form request body
+		args.Set("grant_type", string(grantTypes.ClientCredentials))
+		args.Set("client_id", os.Getenv("SPOTIFY_CLIENT_ID"))
+		args.Set("client_secret", os.Getenv("SPOTIFY_CLIENT_SECRET"))
 
-	// get response in string
-	var bodyData tokenResponse
-	_, _, errs := res.Struct(&bodyData)
+		// make form request and use Debug to log request and response details
+		res := cli.Post("https://accounts.spotify.com/api/token").Form(args).Debug()
 
-	if errs != nil {
-		log.Panic(errs)
+		// get response in string
+		var bodyData tokenResponse
+		_, _, errs := res.Struct(&bodyData)
+
+		if errs != nil {
+			log.Panic(errs)
+		}
+
+		tokenstore.GlobalTokenStore.SetToken(string(SPOTIFY_CC), tokenstore.TokenEntry{
+			Token:      bodyData.AccessToken,
+			Expiration: time.Now().Add(time.Second * time.Duration(bodyData.ExpiresIn)),
+		})
+
+		tt, _ := tokenstore.GlobalTokenStore.GetToken(string(SPOTIFY_CC))
+
+		fmt.Println("Spotify Token from store:", tt)
+	} else { // authorization code grant request
+		args.Set("grant_type", string(grantTypes.AuthorizationCode))
+		args.Set("code", code[0])
+		args.Set("redirect_uri", os.Getenv("SPOTIFY_REDIRECT_URI"))
+
+		res := cli.Post("https://accounts.spotify.com/api/token").Form(args).Debug()
+
+		var bodyData tokenResponse
+		_, _, errs := res.Struct(&bodyData)
+
+		if errs != nil {
+			log.Panic(errs)
+		}
+
+		tokenstore.GlobalTokenStore.SetToken(string(SPOTIFY_AC), tokenstore.TokenEntry{
+			Token:        bodyData.AccessToken,
+			Expiration:   time.Now().Add(time.Second * time.Duration(bodyData.ExpiresIn)),
+			RefreshToken: bodyData.RefreshToken,
+			Scope:        bodyData.Scope,
+		})
 	}
 
-	tokenstore.GlobalTokenStore.SetToken("spotify", bodyData.AccessToken)
+}
 
-	tt, _ := tokenstore.GlobalTokenStore.GetToken("spotify")
+func checkAndObtainToken(name string) string {
+	_, tokenValid := tokenstore.GlobalTokenStore.GetToken(name)
 
-	fmt.Println("Spotify Token from store:", tt)
+	if !tokenValid {
+		FetchAccessToken()
+	}
+
+	token, _ := tokenstore.GlobalTokenStore.GetToken(name)
+
+	return token
 
 }
 
 func GetPlaylistTracks(id string) {
 	cli := fiber.Client{}
 
-	_, tokenValid := tokenstore.GlobalTokenStore.GetToken("spotify")
-
-	if !tokenValid {
-		GetAccessToken()
-	}
-
-	token, _ := tokenstore.GlobalTokenStore.GetToken("spotify")
+	token := checkAndObtainToken(string(SPOTIFY_CC))
 
 	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"/tracks?fields=total,limit,next,offset,previous,items(track(name,is_local,duration_ms,album(album_type,name),artists(name)))&limit=3").
 		Set("Authorization", "Bearer "+token).Debug()
@@ -98,6 +144,23 @@ func GetPlaylistTracks(id string) {
 	if errs != nil {
 		log.Panic(errs)
 	}
+
+}
+
+func CreatePlaylistAndAddTracks(name string, userId string) {
+	cli := fiber.Client{}
+
+	token := checkAndObtainToken(string(SPOTIFY_AC))
+
+	body := map[string]string{
+		"name": name,
+	}
+
+	res := cli.Post(spotifyBaseURL+"/users/"+userId+"/playlists").
+		Set("Authorization", "Bearer "+token).
+		JSON(body).Debug()
+
+	res.String()
 
 }
 
