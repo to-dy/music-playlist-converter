@@ -14,8 +14,10 @@ type TokenStore struct {
 }
 
 type TokenEntry struct {
-	Token      string
-	Expiration time.Time
+	Token        string
+	Scope        *string `json:"scope"`
+	RefreshToken *string `json:"refresh_token"`
+	Expiration   time.Time
 }
 
 func init() {
@@ -26,30 +28,27 @@ func init() {
 
 func NewTokenStore() *TokenStore {
 	return &TokenStore{
-		// store: make(map[string]TokenEntry),
+		store: make(map[string]TokenEntry),
 
-		store: map[string]TokenEntry{
-			"spotify": {
-				Token:      "",
-				Expiration: time.Now(),
-			},
+		// store: map[string]TokenEntry{
+		// 	"spotify": {
+		// 		Token:      "",
+		// 		Expiration: time.Now(),
+		// 	},
 
-			"youtube": {
-				Token:      "",
-				Expiration: time.Now(),
-			},
-		},
+		// 	"youtube": {
+		// 		Token:      "",
+		// 		Expiration: time.Now(),
+		// 	},
+		// },
 	}
 }
 
-func (ts *TokenStore) SetToken(name, token string) {
+func (ts *TokenStore) SetToken(name string, token TokenEntry) {
 	ts.mutex.Lock()
 	defer ts.mutex.Unlock()
 
-	ts.store[name] = TokenEntry{
-		Token:      token,
-		Expiration: time.Now().Add(time.Hour),
-	}
+	ts.store[name] = token
 }
 
 func (ts *TokenStore) GetToken(name string) (string, bool) {
