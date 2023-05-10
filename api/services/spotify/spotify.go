@@ -2,12 +2,10 @@ package spotify
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -41,6 +39,7 @@ type Track struct {
 	Duration int      `json:"duration_ms"`
 	IsLocal  bool     `json:"is_local"`
 	Name     string   `json:"name"`
+	Uri      string   `json:"uri"`
 }
 
 type Album struct {
@@ -52,10 +51,12 @@ type Artist struct {
 	Name string `json:"name"`
 }
 
+type Item struct {
+	Track Track `json:"track"`
+}
+
 type PlaylistTracksResponse struct {
-	Items []struct {
-		Track Track `json:"track"`
-	} `json:"items"`
+	Items    []Item `json:"items"`
 	Limit    int    `json:"limit"`
 	Next     string `json:"next"`
 	Offset   int    `json:"offset"`
@@ -130,12 +131,38 @@ func checkAndObtainToken(name string) string {
 
 }
 
-func GetPlaylistTracks(id string) {
+// verify if spotify playlist exists
+func IsPlaylistValid(id string) bool {
 	cli := fiber.Client{}
 
 	token := checkAndObtainToken(string(SPOTIFY_CC))
 
-	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"/tracks?fields=total,limit,next,offset,previous,items(track(name,is_local,duration_ms,album(album_type,name),artists(name)))&limit=3").
+	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"?fields=id").
+		Set("Authorization", "Bearer "+token).Debug()
+
+	var bodyData struct {
+		Id *string `json:"id"`
+	}
+	status, _, errs := res.Struct(&bodyData)
+
+	if errs != nil {
+		log.Panic(errs)
+		return false
+	}
+
+	if status == http.StatusOK {
+		return bodyData.Id != nil
+	}
+
+	return false
+}
+
+func GetPlaylistTracks(id string) []Item {
+	cli := fiber.Client{}
+
+	token := checkAndObtainToken(string(SPOTIFY_CC))
+
+	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"/tracks?limit=50&fields=total,limit,next,offset,previous,items(track(name,is_local,duration_ms,album(album_type,name),artists(name)))").
 		Set("Authorization", "Bearer "+token).Debug()
 
 	var bodyData PlaylistTracksResponse
@@ -145,9 +172,53 @@ func GetPlaylistTracks(id string) {
 		log.Panic(errs)
 	}
 
+	// tracks := make([]Item, 0, bodyData.Total)
+	tracks := bodyData.Items
+	// tracks := arrutil.Map(bodyData.Items, func(item Item) (track Track, find bool) {
+	// 	return item.Track, true
+	// })
+
+	// if there are more tracks fetch them, currently limited 100 tracks
+	if len(tracks) < bodyData.Total {
+		_, _, errs = cli.Get(bodyData.Next).Set("Authorization", "Bearer "+token).Debug().
+			Struct(&bodyData)
+
+		if errs != nil {
+			log.Panic(errs)
+		}
+
+		tracks = append(tracks, bodyData.Items...)
+
+	}
+
+	return tracks
 }
 
-func CreatePlaylistAndAddTracks(name string, userId string) {
+func SearchTrack(query string, artist string) (track Track, found bool) {
+	cli := fiber.Client{}
+
+	token := checkAndObtainToken(string(SPOTIFY_CC))
+
+	makeQuery := url.QueryEscape("track:" + query + " artist:" + artist)
+
+	res := cli.Get(spotifyBaseURL+"/search?q="+makeQuery+"&type=track&limit=1").
+		Set("Authorization", "Bearer "+token).Debug()
+
+	var bodyData PlaylistTracksResponse
+
+	status, _, errs := res.Struct(&bodyData)
+	if errs != nil {
+		log.Panic(errs)
+	}
+
+	if status == http.StatusOK {
+		return bodyData.Items[0].Track, true
+	}
+
+	return Track{}, false
+}
+
+func CreatePlaylist(name string, userId string) (id *string) {
 	cli := fiber.Client{}
 
 	token := checkAndObtainToken(string(SPOTIFY_AC))
@@ -160,49 +231,69 @@ func CreatePlaylistAndAddTracks(name string, userId string) {
 		Set("Authorization", "Bearer "+token).
 		JSON(body).Debug()
 
-	res.String()
+	var bodyData struct {
+		Id  string `json:"id"`
+		URI string `json:"uri"`
+	}
 
+	status, _, errs := res.Struct(&bodyData)
+
+	if errs != nil {
+		log.Panic(errs)
+		return id
+	}
+
+	if status == http.StatusCreated {
+		return &bodyData.Id
+	}
+
+	return id
 }
 
-// testing with "net/http" for learning purposes
-func __GetSpotifyAccessToken__() {
+func AddTracksToPlaylist(playlistId string, tracks []Track) *string {
+	cli := fiber.Client{}
 
-	// set form request body
-	reqBody := url.Values{
-		"grant_type":    {"client_credentials"},
-		"client_id":     {string(os.Getenv("SPOTIFY_CLIENT_ID"))},
-		"client_secret": {string(os.Getenv("SPOTIFY_CLIENT_SECRET"))},
+	token := checkAndObtainToken(string(SPOTIFY_AC))
+
+	uris := ""
+
+	for _, track := range tracks {
+		entry, found := SearchTrack(track.Name, track.Artists[0].Name)
+
+		if found {
+			uris += entry.Uri + ","
+		}
 	}
 
-	// setup request
-	req, reqErr := http.NewRequest("POST", spotifyBaseURL+"/token", strings.NewReader(reqBody.Encode()))
-
-	if reqErr != nil {
-		// log.Panic(reqErr)
-		log.Fatalf("Error creating request: %v", reqErr)
+	body := map[string]string{
+		"uris": uris,
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res := cli.Post(spotifyBaseURL+"/playlists/"+playlistId+"/tracks").Set("Authorization", "Bearer "+token).
+		JSON(body).Debug()
 
-	// make request
-	res, resErr := http.DefaultClient.Do(req)
-
-	if resErr != nil {
-		log.Panic(resErr)
-	}
-	defer res.Body.Close()
-
-	fmt.Println("Response Status:", res.Status)
-
-	// if res.StatusCode != 200 {
-	// 	log.Fatalf("Unexpected status code: %d", res.StatusCode)
-	// }
-
-	// print response body in terminal    (for debugging)
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err)
+	var bodyData struct {
+		snapshotID string `json:"snapshot_id"`
 	}
 
-	fmt.Println("Response Body:", string(body))
+	status, _, errs := res.Struct(&bodyData)
+
+	if errs != nil {
+		log.Panic(errs)
+		return nil
+	}
+
+	if status == http.StatusCreated {
+		return &bodyData.snapshotID
+	}
+
+	return nil
+}
+
+// handle unauthorized response
+func handleUnauthorized(agent *fiber.Agent, tokenName SpotifyTokenName) *fiber.Agent {
+	// refetch accessToken and try again
+	token := checkAndObtainToken(string(tokenName))
+
+	return agent.Reuse().Set("Authorization", "Bearer "+token)
 }
