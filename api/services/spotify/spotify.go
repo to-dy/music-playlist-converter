@@ -1,7 +1,6 @@
 package spotify
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,16 +11,10 @@ import (
 
 	grantTypes "github.com/to-dy/music-playlist-converter/api/services"
 	"github.com/to-dy/music-playlist-converter/api/stores/tokenstore"
+	tokenTypes "github.com/to-dy/music-playlist-converter/api/stores/tokenstore"
 )
 
 var spotifyBaseURL = "https://api.spotify.com/v1"
-
-type SpotifyTokenName string
-
-const (
-	SPOTIFY_AC SpotifyTokenName = "spotify_ac"
-	SPOTIFY_CC SpotifyTokenName = "spotify_cc"
-)
 
 type tokenResponse struct {
 	AccessToken string `json:"access_token"`
@@ -64,12 +57,16 @@ type PlaylistTracksResponse struct {
 	Total    int    `json:"total"`
 }
 
-func FetchAccessToken(code ...string) {
-	cli := fiber.Client{}
-	args := fiber.AcquireArgs()
+func FetchAccessToken(name string, code ...string) (string, error) {
+	token, tokenValid := tokenstore.GlobalTokenStore.GetToken(name)
 
-	// no code provided meaning its a client_credential grant request
-	if len(code) == 0 {
+	if tokenValid {
+		return token, nil
+
+	} else if !tokenValid && len(code) == 0 { // no code provided meaning its a client_credential grant request
+		cli := fiber.Client{}
+		args := fiber.AcquireArgs()
+
 		// set form request body
 		args.Set("grant_type", string(grantTypes.ClientCredentials))
 		args.Set("client_id", os.Getenv("SPOTIFY_CLIENT_ID"))
@@ -86,15 +83,17 @@ func FetchAccessToken(code ...string) {
 			log.Panic(errs)
 		}
 
-		tokenstore.GlobalTokenStore.SetToken(string(SPOTIFY_CC), tokenstore.TokenEntry{
+		tokenstore.GlobalTokenStore.SetToken(string(tokenTypes.SPOTIFY_CC), tokenstore.TokenEntry{
 			Token:      bodyData.AccessToken,
 			Expiration: time.Now().Add(time.Second * time.Duration(bodyData.ExpiresIn)),
 		})
 
-		tt, _ := tokenstore.GlobalTokenStore.GetToken(string(SPOTIFY_CC))
+		return bodyData.AccessToken, nil
 
-		fmt.Println("Spotify Token from store:", tt)
 	} else { // authorization code grant request
+		cli := fiber.Client{}
+		args := fiber.AcquireArgs()
+
 		args.Set("grant_type", string(grantTypes.AuthorizationCode))
 		args.Set("code", code[0])
 		args.Set("redirect_uri", os.Getenv("SPOTIFY_REDIRECT_URI"))
@@ -108,34 +107,22 @@ func FetchAccessToken(code ...string) {
 			log.Panic(errs)
 		}
 
-		tokenstore.GlobalTokenStore.SetToken(string(SPOTIFY_AC), tokenstore.TokenEntry{
+		tokenstore.GlobalTokenStore.SetToken(string(tokenTypes.SPOTIFY_AC), tokenstore.TokenEntry{
 			Token:        bodyData.AccessToken,
 			Expiration:   time.Now().Add(time.Second * time.Duration(bodyData.ExpiresIn)),
 			RefreshToken: bodyData.RefreshToken,
 			Scope:        bodyData.Scope,
 		})
+
+		return bodyData.AccessToken, nil
 	}
-
-}
-
-func checkAndObtainToken(name string) string {
-	_, tokenValid := tokenstore.GlobalTokenStore.GetToken(name)
-
-	if !tokenValid {
-		FetchAccessToken()
-	}
-
-	token, _ := tokenstore.GlobalTokenStore.GetToken(name)
-
-	return token
-
 }
 
 // verify if spotify playlist exists
 func IsPlaylistValid(id string) bool {
 	cli := fiber.Client{}
 
-	token := checkAndObtainToken(string(SPOTIFY_CC))
+	token, _ := FetchAccessToken(string(tokenTypes.SPOTIFY_CC))
 
 	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"?fields=id").
 		Set("Authorization", "Bearer "+token).Debug()
@@ -160,7 +147,7 @@ func IsPlaylistValid(id string) bool {
 func GetPlaylistTracks(id string) []Item {
 	cli := fiber.Client{}
 
-	token := checkAndObtainToken(string(SPOTIFY_CC))
+	token, _ := FetchAccessToken(string(tokenTypes.SPOTIFY_CC))
 
 	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"/tracks?limit=50&fields=total,limit,next,offset,previous,items(track(name,is_local,duration_ms,album(album_type,name),artists(name)))").
 		Set("Authorization", "Bearer "+token).Debug()
@@ -197,7 +184,7 @@ func GetPlaylistTracks(id string) []Item {
 func SearchTrack(query string, artist string) (track Track, found bool) {
 	cli := fiber.Client{}
 
-	token := checkAndObtainToken(string(SPOTIFY_CC))
+	token, _ := FetchAccessToken(string(tokenTypes.SPOTIFY_CC))
 
 	makeQuery := url.QueryEscape("track:" + query + " artist:" + artist)
 
@@ -221,7 +208,7 @@ func SearchTrack(query string, artist string) (track Track, found bool) {
 func CreatePlaylist(name string, userId string) (id *string) {
 	cli := fiber.Client{}
 
-	token := checkAndObtainToken(string(SPOTIFY_AC))
+	token, _ := FetchAccessToken(string(tokenTypes.SPOTIFY_AC))
 
 	body := map[string]string{
 		"name": name,
@@ -253,7 +240,7 @@ func CreatePlaylist(name string, userId string) (id *string) {
 func AddTracksToPlaylist(playlistId string, tracks []Track) *string {
 	cli := fiber.Client{}
 
-	token := checkAndObtainToken(string(SPOTIFY_AC))
+	token, _ := FetchAccessToken(string(tokenTypes.SPOTIFY_AC))
 
 	uris := ""
 
@@ -291,9 +278,9 @@ func AddTracksToPlaylist(playlistId string, tracks []Track) *string {
 }
 
 // handle unauthorized response
-func handleUnauthorized(agent *fiber.Agent, tokenName SpotifyTokenName) *fiber.Agent {
+func handleUnauthorized(agent *fiber.Agent, tokenName tokenTypes.TokenName) *fiber.Agent {
 	// refetch accessToken and try again
-	token := checkAndObtainToken(string(tokenName))
+	token, _ := FetchAccessToken(string(tokenName))
 
 	return agent.Reuse().Set("Authorization", "Bearer "+token)
 }

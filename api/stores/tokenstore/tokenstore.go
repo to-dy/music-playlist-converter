@@ -1,6 +1,7 @@
 package tokenstore
 
 import (
+	"os"
 	"sync"
 	"time"
 )
@@ -28,19 +29,13 @@ func init() {
 
 func NewTokenStore() *TokenStore {
 	return &TokenStore{
-		store: make(map[string]TokenEntry),
 
-		// store: map[string]TokenEntry{
-		// 	"spotify": {
-		// 		Token:      "",
-		// 		Expiration: time.Now(),
-		// 	},
-
-		// 	"youtube": {
-		// 		Token:      "",
-		// 		Expiration: time.Now(),
-		// 	},
-		// },
+		store: map[string]TokenEntry{
+			string(YOUTUBE_CC): {
+				Token:      os.Getenv("YOUTUBE_API_KEY"),
+				Expiration: time.Time{}, // indefinite, key doesn't expire unless revoked ,
+			},
+		},
 	}
 }
 
