@@ -27,3 +27,6 @@
 
 # vscode workspace settings
 .vscode
+
+# oauth credentials https://console.cloud.google.com/apis/credentials
+google_credentials.json
