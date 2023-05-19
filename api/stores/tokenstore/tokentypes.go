@@ -7,4 +7,5 @@ const (
 	SPOTIFY_AC TokenName = "spotify_ac"
 
 	YOUTUBE_CC TokenName = "youtube_cc"
+	YOUTUBE_AC TokenName = "youtube_ac"
 )

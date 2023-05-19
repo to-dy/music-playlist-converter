@@ -54,8 +54,8 @@ func (ts *TokenStore) GetToken(name string) (*oauth2.Token, bool) {
 	defer ts.mutex.Unlock()
 
 	entry, found := ts.store[name]
-	if !found || entry.Expiration.Before(time.Now()) {
-		return nil, false
+	if !found || entry.Expiration.Before(time.Now()) && (name != string(YOUTUBE_CC)) {
+		return &oauth2.Token{}, false
 	}
 	return entry.Token, true
 }
