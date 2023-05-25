@@ -100,6 +100,22 @@ func GetPlaylistTracks(id string) []*youtube.PlaylistItem {
 	return res.Items
 }
 
+// func ToSearchTrackList(tracks []*youtube.PlaylistItem) services.SearchTrackList {
+// 	searchTrackList := make(services.SearchTrackList, 0, len(tracks))
+// 	// searchTrackList := services.SearchTrackList{}
+
+// 	for _, track := range tracks {
+// 		t := services.SearchTrack{
+// 			Title:   track.Snippet.Title,
+// 			Artists: track.Track.Artists,
+// 		}
+
+// 		append(searchTrackList, t)
+// 	}
+
+// 	return searchTrackList
+// }
+
 func SearchTrack(query string, artist string) (track *youtube.SearchResult, found bool) {
 	// search for track on youtube by provided query(artist + track)
 	res, err := youtubeService.Search.List([]string{"snippet"}).Q(query).MaxResults(1).Type("video").Do()
