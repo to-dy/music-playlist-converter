@@ -214,7 +214,6 @@ func GetPlaylistTracks(id string) []Item {
 
 func ToSearchTrackList(tracks []Item) services.SearchTrackList {
 	searchTrackList := make(services.SearchTrackList, 0, len(tracks))
-	// searchTrackList := services.SearchTrackList{}
 
 	for _, track := range tracks {
 		t := services.SearchTrack{
@@ -222,7 +221,7 @@ func ToSearchTrackList(tracks []Item) services.SearchTrackList {
 			Artists: track.Track.Artists,
 		}
 
-		append(searchTrackList, t)
+		searchTrackList = append(searchTrackList, t)
 	}
 
 	return searchTrackList
