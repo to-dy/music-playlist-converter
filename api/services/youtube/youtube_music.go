@@ -4,8 +4,12 @@ package youtube
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -48,9 +52,7 @@ func generateBodyContext(data []bodyData) map[string]interface{} {
 				"clientName":    "WEB_REMIX",
 				"clientVersion": "0.1",
 			},
-		},
-		"params": "EgWKAQIIAWoKEAoQCRADEAQQBQ%3D%3D", // do not know what this does but it generates the type of data needed
-	}
+		}}
 
 	if len(data) > 0 {
 		for _, item := range data {
@@ -65,7 +67,10 @@ func YTMusic_SearchTrack(query string, artist string) ([]*Music, bool) {
 	// search for track on youtube by provided query(artist + track)
 	cli := fiber.Client{}
 
-	body := generateBodyContext([]bodyData{{Key: "query", Value: query + " - " + artist}})
+	body := generateBodyContext([]bodyData{
+		{Key: "query", Value: query + " - " + artist},
+		{Key: "params", Value: "EgWKAQIIAWoKEAoQCRADEAQQBQ%3D%3D"}, // do not know what this does, but it generates the type of data needed
+	})
 
 	res := cli.Post(YTMusic_BaseURL+"/search?alt=json&maxResults=1&key="+YOUTUBE_MUSIC_KEY).
 		UserAgent("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)").
@@ -103,9 +108,12 @@ func YTMusic_SearchTrack(query string, artist string) ([]*Music, bool) {
 
 }
 
-// func YTMusic_GetPlaylistTracks(id string) ([]*Music, bool) {
-func YTMusic_GetPlaylistTracks(id string) {
+func YTMusic_GetPlaylistTracks(id string) ([]*Music, error) {
 	cli := fiber.Client{}
+
+	if !strings.HasPrefix(id, "VL") {
+		id = "VL" + id
+	}
 
 	body := generateBodyContext([]bodyData{{Key: "browseId", Value: id}})
 
@@ -114,11 +122,14 @@ func YTMusic_GetPlaylistTracks(id string) {
 		Set("origin", "https://music.youtube.com").
 		JSON(body).Debug()
 
-	_, b, errs := res.Bytes()
+	var ytmRes YTMusic_PlaylistResults
+
+	status, b, errs := res.Struct(&ytmRes)
 
 	if errs != nil {
 		log.Panic(errs)
-		// return
+
+		return nil, errs[0]
 	}
 
 	filePath := "res_output_3.json"
@@ -126,12 +137,15 @@ func YTMusic_GetPlaylistTracks(id string) {
 
 	if err != nil {
 		log.Println("Error writing file:", err)
-		return
+	} else {
+		log.Println("JSON data written to", filePath)
 	}
 
-	log.Println("JSON data written to", filePath)
+	if status == http.StatusOK {
 
-	// music := parseSearchMusicsBody(b)
+		tracks := parseListMusicsFromPlaylistBody(&ytmRes)
+		return tracks, nil
+	}
 
-	// return music, len(music) > 0
+	return nil, errors.New("playlist not found | Status code: " + strconv.Itoa(status))
 }

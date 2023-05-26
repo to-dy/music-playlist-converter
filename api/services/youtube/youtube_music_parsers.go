@@ -39,16 +39,25 @@ func parseSearchMusicsBody(body *YTMusic_SearchResults) []*Music {
 }
 
 // ref: https://github.com/baptisteArno/node-youtube-music/blob/main/src/listMusicsFromPlaylist.ts#LL6C18-L6C18
-func parseListMusicsFromPlaylistBody(body map[string]interface{}) []Music {
-	contents := body["contents"].(map[string]interface{})["singleColumnBrowseResultsRenderer"].(map[string]interface{})["tabs"].([]interface{})[0].(map[string]interface{})["tabRenderer"].(map[string]interface{})["content"].(map[string]interface{})["sectionListRenderer"].(map[string]interface{})["contents"].([]interface{})[0].(map[string]interface{})["musicPlaylistShelfRenderer"].(map[string]interface{})["contents"].([]interface{})
+func parseListMusicsFromPlaylistBody(body *YTMusic_PlaylistResults) []*Music {
+	results := []*Music{}
 
-	results := []Music{}
+	contents := body.Contents.SingleColumnBrowseResultsRenderer.Tabs[0].TabRenderer.Content.SectionListRenderer.Contents
 
-	for _, content := range contents {
-		contentMap := content.(map[string]interface{})
-		song := parseMusicInPlaylistItem(contentMap)
-		if song != nil {
-			results = append(results, *song)
+	if len(contents) != 0 {
+		musicPlaylistShelfRenderer := contents[0].MusicPlaylistShelfRenderer
+
+		for _, content := range musicPlaylistShelfRenderer.Contents {
+			song, err := parseMusicInPlaylistItem(&content)
+
+			if err != nil {
+				log.Println("Error parsing playlist item:", err)
+				continue
+			}
+
+			if song != nil {
+				results = append(results, song)
+			}
 		}
 	}
 
@@ -122,62 +131,58 @@ func parseMusicItem(content *YTMusic_MusicShelfContent) (*Music, error) {
 	}, nil
 }
 
-func parseMusicInPlaylistItem(content map[string]interface{}) *Music {
-	musicRenderer := content["musicResponsiveListItemRenderer"].(map[string]interface{})
-	flexColumns := musicRenderer["flexColumns"].([]interface{})
+func parseMusicInPlaylistItem(content *YTMusic_MusicShelfContent) (*Music, error) {
+	musicRenderer := content.MusicResponsiveListItemRenderer
+	flexColumns := musicRenderer.FlexColumns
+	fixedColumns := musicRenderer.FixedColumns
 
 	var youtubeId, title string
-	var artists []string
+	var artists []shared_types.Artist
 	var album string
 	var duration *time.Duration
 
-	// Extract YouTube ID
 	if len(flexColumns) > 0 {
-		flexColumn := flexColumns[0].(map[string]interface{})["musicResponsiveListItemFlexColumnRenderer"].(map[string]interface{})
-		runs := flexColumn["text"].(map[string]interface{})["runs"].([]interface{})
-		if len(runs) > 0 {
-			navigationEndpoint := runs[0].(map[string]interface{})["navigationEndpoint"].(map[string]interface{})
-			if watchEndpoint, ok := navigationEndpoint["watchEndpoint"].(map[string]interface{}); ok {
-				youtubeId = watchEndpoint["videoId"].(string)
-			}
-		}
-	}
+		flexColumn := flexColumns[0].MusicResponsiveListItemFlexColumnRenderer
+		runs := flexColumn.Text.Runs
 
-	// Extract title
-	if len(flexColumns) > 0 {
-		flexColumn := flexColumns[0].(map[string]interface{})["musicResponsiveListItemFlexColumnRenderer"].(map[string]interface{})
-		runs := flexColumn["text"].(map[string]interface{})["runs"].([]interface{})
+		// Extract title
+		title = runs[0].Text
 		if len(runs) > 0 {
-			title = runs[0].(map[string]interface{})["text"].(string)
+
+			// Extract YouTube ID
+			_, ok := reflect.TypeOf(runs[0].NavigationEndpoint).FieldByName("WatchEndpoint")
+			if ok {
+				youtubeId = runs[0].NavigationEndpoint.WatchEndpoint.VideoId
+			}
 		}
 	}
 
 	// Extract artists
 	if len(flexColumns) > 1 {
-		flexColumn := flexColumns[1].(map[string]interface{})["musicResponsiveListItemFlexColumnRenderer"].(map[string]interface{})
-		runs := flexColumn["text"].(map[string]interface{})["runs"].([]interface{})
-		artists = listArtists(runs)
+		flexColumn := flexColumns[1].MusicResponsiveListItemFlexColumnRenderer
+		runs := flexColumn.Text.Runs
+
+		artists = listArtists(&runs)
 	}
 
 	// Extract album
 	if len(flexColumns) > 2 {
-		flexColumn := flexColumns[2].(map[string]interface{})["musicResponsiveListItemFlexColumnRenderer"].(map[string]interface{})
-		runs := flexColumn["text"].(map[string]interface{})["runs"].([]interface{})
+		flexColumn := flexColumns[2].MusicResponsiveListItemFlexColumnRenderer
+		runs := flexColumn.Text.Runs
+
 		if len(runs) > 0 {
-			album = runs[0].(map[string]interface{})["text"].(string)
+			album = runs[0].Text
 		}
 	}
 
 	// Extract duration
-	if len(flexColumns) > 0 {
-		flexColumn := flexColumns[0].(map[string]interface{})["musicResponsiveListItemFixedColumnRenderer"].(map[string]interface{})
-		runs := flexColumn["text"].(map[string]interface{})["runs"].([]interface{})
+	if len(fixedColumns) > 0 {
+		fixedColumn := fixedColumns[0].MusicResponsiveListItemFixedColumnRenderer
+		runs := fixedColumn.Text.Runs
+
 		if len(runs) > 0 {
-			label := runs[0].(map[string]interface{})["text"].(string)
-			duration = &Duration{
-				Label:        label,
-				TotalSeconds: parseDuration(label),
-			}
+			label := runs[0].Text
+			duration = parseDuration(label)
 		}
 	}
 
@@ -186,8 +191,8 @@ func parseMusicInPlaylistItem(content map[string]interface{}) *Music {
 		Title:     title,
 		Artists:   artists,
 		Album:     album,
-		Duration:  duration,
-	}
+		Duration:  *duration,
+	}, nil
 }
 
 func parseDuration(durationLabel string) *time.Duration {

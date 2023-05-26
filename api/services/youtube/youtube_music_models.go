@@ -29,9 +29,18 @@ type YTMusic_MusicShelfContent struct {
 			MusicResponsiveListItemFlexColumnRenderer struct {
 				Text struct {
 					Runs YTMusic_Runs `json:"runs"`
-				}
+				} `json:"text"`
 			} `json:"musicResponsiveListItemFlexColumnRenderer"`
 		} `json:"flexColumns"`
+
+		FixedColumns []struct {
+			MusicResponsiveListItemFixedColumnRenderer struct {
+				Text struct {
+					Runs YTMusic_Runs `json:"runs"`
+				} `json:"text"`
+			} `json:"musicResponsiveListItemFixedColumnRenderer"`
+		} `json:"fixedColumns"`
+
 		PlaylistItemData struct {
 			VideoId string `json:"videoId"`
 		} `json:"playlistItemData"`
@@ -62,5 +71,25 @@ type YTMusic_SearchResults struct {
 				} `json:"tabRenderer"`
 			} `json:"tabs"`
 		} `json:"tabbedSearchResultsRenderer"`
+	} `json:"contents"`
+}
+
+type YTMusic_PlaylistResults struct {
+	Contents struct {
+		SingleColumnBrowseResultsRenderer struct {
+			Tabs []struct {
+				TabRenderer struct {
+					Content struct {
+						SectionListRenderer struct {
+							Contents []struct {
+								MusicPlaylistShelfRenderer struct {
+									Contents []YTMusic_MusicShelfContent `json:"contents"`
+								} `json:"musicPlaylistShelfRenderer"`
+							} `json:"contents"`
+						} `json:"sectionListRenderer"`
+					} `json:"content`
+				} `json:"tabRenderer"`
+			} `json:"tabs"`
+		} `json:"singleColumnBrowseResultsRenderer"`
 	} `json:"contents"`
 }
