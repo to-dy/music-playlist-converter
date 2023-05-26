@@ -3,7 +3,6 @@ package youtube
 // youtube music specific api interactions
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -63,7 +62,7 @@ func generateBodyContext(data []bodyData) map[string]interface{} {
 	return body
 }
 
-func YTMusic_SearchTrack(query string, artist string) ([]*Music, bool) {
+func YTMusic_SearchTrack(query string, artist string) (*Music, bool) {
 	// search for track on youtube by provided query(artist + track)
 	cli := fiber.Client{}
 
@@ -87,24 +86,19 @@ func YTMusic_SearchTrack(query string, artist string) ([]*Music, bool) {
 	}
 
 	music := parseSearchMusicsBody(&ytmRes)
-	musicBytes, _ := json.Marshal(music)
 
-	// for _, item := range music {
-	// 	di := &item
+	// musicBytes, _ := json.Marshal(music)
 
-	// 	log.Println(di.YoutubeId)
+	// filePath := "res_output.json"
+	// err := os.WriteFile(filePath, musicBytes, 0644)
+
+	// if err != nil {
+	// 	log.Panic("Error writing file:", err)
 	// }
 
-	filePath := "res_output.json"
-	err := os.WriteFile(filePath, musicBytes, 0644)
+	// log.Println("JSON data written to", filePath)
 
-	if err != nil {
-		log.Panic("Error writing file:", err)
-	}
-
-	log.Println("JSON data written to", filePath)
-
-	return music, len(music) > 0
+	return music[0], len(music) > 0
 
 }
 

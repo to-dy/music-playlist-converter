@@ -136,22 +136,13 @@ func SearchTrack(query string, artist string) (track *youtube.SearchResult, foun
 	return nil, false
 }
 
-func CreatePlaylist(name string) (id *string) {
+func CreatePlaylist(name string) (*string, error) {
 	token, tokenErr := getOauthToken()
 
 	if tokenErr != nil {
 		log.Println(tokenErr)
-		return nil
+		return nil, tokenErr
 	}
-
-	// ctx := context.Background()
-
-	// service, svErr := youtube.NewService(ctx, option.WithTokenSource(OauthConfig.TokenSource(ctx, token)))
-
-	// if svErr != nil {
-	// 	log.Println(svErr)
-	// 	return nil
-	// }
 
 	playlist := &youtube.Playlist{
 		Snippet: &youtube.PlaylistSnippet{
@@ -166,11 +157,37 @@ func CreatePlaylist(name string) (id *string) {
 
 	if err != nil {
 		log.Panic(err)
-		return nil
+
+		return nil, err
 	}
 
-	return &res.Id
+	return &res.Id, nil
 }
 
-// func AddTracksToPlaylist(playlistId string, tracks []*youtube.SearchResult) *string {
-// }
+func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList) {
+
+	for _, track := range tracks {
+		artist := ""
+		if len(track.Artists) > 0 {
+			artist = track.Artists[0].Name
+		}
+
+		entry, found := YTMusic_SearchTrack(track.Title, artist)
+
+		PlaylistItem := &youtube.PlaylistItem{
+			Snippet: &youtube.PlaylistItemSnippet{
+				ResourceId: &youtube.ResourceId{
+					VideoId: entry.YoutubeId,
+				},
+				Title: entry.Title,
+			},
+		}
+
+		if found {
+			youtubeService.PlaylistItems.Insert([]string{"snippet", "status"}, PlaylistItem)
+		} else {
+			continue
+		}
+
+	}
+}
