@@ -8,7 +8,5 @@ type SearchTrack struct {
 	Title    string
 	Artists  shared_types.Artists
 	Duration int64
-	Album    struct {
-		Name string
-	}
+	Album    shared_types.Album
 }

@@ -21,7 +21,7 @@ type Music struct {
 	YoutubeId string
 	Title     string
 	Artists   shared_types.Artists
-	Album     string
+	Album     shared_types.Album
 	Duration  time.Duration
 }
 

@@ -46,17 +46,12 @@ type tokenResponse struct {
 }
 
 type Track struct {
-	Album    Album `json:"album"`
+	Album    shared_types.Album `json:"album"`
 	Artists  shared_types.Artists
 	Duration int    `json:"duration_ms"`
 	IsLocal  bool   `json:"is_local"`
 	Name     string `json:"name"`
 	Uri      string `json:"uri"`
-}
-
-type Album struct {
-	AlbumType string `json:"album_type"`
-	Name      string `json:"name"`
 }
 
 type Artist shared_types.Artist
@@ -212,19 +207,21 @@ func GetPlaylistTracks(id string) []Item {
 	return tracks
 }
 
-func ToSearchTrackList(tracks []Item) services.SearchTrackList {
+func ToSearchTrackList(tracks []*Item) *services.SearchTrackList {
 	searchTrackList := make(services.SearchTrackList, 0, len(tracks))
 
 	for _, track := range tracks {
 		t := services.SearchTrack{
-			Title:   track.Track.Name,
-			Artists: track.Track.Artists,
+			Title:    track.Track.Name,
+			Artists:  track.Track.Artists,
+			Album:    track.Track.Album,
+			Duration: int64(track.Track.Duration),
 		}
 
 		searchTrackList = append(searchTrackList, t)
 	}
 
-	return searchTrackList
+	return &searchTrackList
 }
 
 func SearchTrack(query string, artist string) (track *Track, found bool) {

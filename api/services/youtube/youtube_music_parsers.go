@@ -126,8 +126,10 @@ func parseMusicItem(content *YTMusic_MusicShelfContent) (*Music, error) {
 		YoutubeId: youtubeId,
 		Title:     title,
 		Artists:   artists,
-		Album:     album,
-		Duration:  *duration,
+		Album: shared_types.Album{
+			Name: album,
+		},
+		Duration: *duration,
 	}, nil
 }
 
@@ -190,8 +192,9 @@ func parseMusicInPlaylistItem(content *YTMusic_MusicShelfContent) (*Music, error
 		YoutubeId: youtubeId,
 		Title:     title,
 		Artists:   artists,
-		Album:     album,
-		Duration:  *duration,
+		Album: shared_types.Album{
+			Name: album,
+		}, Duration: *duration,
 	}, nil
 }
 
