@@ -11,6 +11,7 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 
+	"github.com/to-dy/music-playlist-converter/api/services"
 	"github.com/to-dy/music-playlist-converter/api/stores/tokenstore"
 )
 
@@ -100,21 +101,22 @@ func GetPlaylistTracks(id string) []*youtube.PlaylistItem {
 	return res.Items
 }
 
-// func ToSearchTrackList(tracks []*youtube.PlaylistItem) services.SearchTrackList {
-// 	searchTrackList := make(services.SearchTrackList, 0, len(tracks))
-// 	// searchTrackList := services.SearchTrackList{}
+func ToSearchTrackList(tracks []*Music) *services.SearchTrackList {
+	searchTrackList := make(services.SearchTrackList, 0, len(tracks))
 
-// 	for _, track := range tracks {
-// 		t := services.SearchTrack{
-// 			Title:   track.Snippet.Title,
-// 			Artists: track.Track.Artists,
-// 		}
+	for _, track := range tracks {
+		t := services.SearchTrack{
+			Title:    track.Title,
+			Artists:  track.Artists,
+			Album:    track.Album,
+			Duration: track.Duration.Milliseconds(),
+		}
 
-// 		append(searchTrackList, t)
-// 	}
+		searchTrackList = append(searchTrackList, t)
+	}
 
-// 	return searchTrackList
-// }
+	return &searchTrackList
+}
 
 func SearchTrack(query string, artist string) (track *youtube.SearchResult, found bool) {
 	// search for track on youtube by provided query(artist + track)
