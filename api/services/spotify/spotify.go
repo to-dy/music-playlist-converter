@@ -20,14 +20,6 @@ import (
 
 var spotifyBaseURL = "https://api.spotify.com/v1"
 
-var OauthConfig = &oauth2.Config{
-	ClientID:     os.Getenv("SPOTIFY_CLIENT_ID"),
-	ClientSecret: os.Getenv("SPOTIFY_CLIENT_SECRET"),
-	RedirectURL:  os.Getenv("SPOTIFY_REDIRECT_URI"),
-	Endpoint:     spotifyOauth.Endpoint,
-	Scopes:       []string{"playlist-modify-public", "playlist-read-private"},
-}
-
 var clientCredentialsConfig = &clientcredentials.Config{
 	ClientID:     os.Getenv("SPOTIFY_CLIENT_ID"),
 	ClientSecret: os.Getenv("SPOTIFY_CLIENT_SECRET"),
@@ -67,6 +59,16 @@ type PlaylistTracksResponse struct {
 	Offset   int    `json:"offset"`
 	Previous string `json:"previous"`
 	Total    int    `json:"total"`
+}
+
+func OauthConfig() *oauth2.Config {
+	return &oauth2.Config{
+		ClientID:     os.Getenv("SPOTIFY_CLIENT_ID"),
+		ClientSecret: os.Getenv("SPOTIFY_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("SPOTIFY_REDIRECT_URI"),
+		Endpoint:     spotifyOauth.Endpoint,
+		Scopes:       []string{"playlist-modify-public", "playlist-read-private"},
+	}
 }
 
 func StoreOauthToken(token *oauth2.Token) {
@@ -129,7 +131,7 @@ func getAccessToken(name string) (string, error) {
 	}
 
 	if !tokenValid && name == string(tokenstore.SPOTIFY_AC) {
-		ts := OauthConfig.TokenSource(context.Background(), token)
+		ts := OauthConfig().TokenSource(context.Background(), token)
 		token, err := ts.Token()
 
 		tokenstore.GlobalTokenStore.SetToken(string(tokenstore.SPOTIFY_AC), tokenstore.TokenEntry{

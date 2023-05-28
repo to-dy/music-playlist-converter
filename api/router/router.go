@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"github.com/to-dy/music-playlist-converter/api/router/routes"
 )
@@ -26,6 +27,9 @@ func SetupServer() {
 
 	// server logging
 	app.Use(logger.New())
+
+	// recover from panic
+	app.Use(recover.New())
 
 	routes.SetupRoutes(app)
 
