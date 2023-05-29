@@ -1,3 +1,5 @@
-# WIP | Music playlist converter, supports Spotify, YouTubeMusic & Apple Music 
+# Music playlist converter, supports Spotify, YouTubeMusic & Apple Music
 
-**built for personal use and learning Go.**
+Built primarily to learn Go and solve a personal need. This app converts music playlists between platforms. It currently supports conversions between Spotify & YouTube Music.
+
+_Conversion from Apple Music coming soon_
