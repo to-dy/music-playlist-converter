@@ -1,5 +1,9 @@
 package handlers
 
+type APIResponse struct {
+	Data interface{} `json:"data,omitempty"`
+}
+
 type ErrorObject struct {
 	Status int          `json:"status,omitempty"`
 	Title  string       `json:"title,omitempty"`
