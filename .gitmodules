@@ -1,3 +1,4 @@
 [submodule "music-playlist-converter-ui"]
 	path = web-app
 	url = git@github.com:to-dy/music-playlist-converter-ui.git
+	branch = main
