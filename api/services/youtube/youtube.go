@@ -74,7 +74,8 @@ func IsPlaylistValid(id string) (bool, error) {
 	res, err := youtubeService.Playlists.List([]string{"id"}).Id(id).MaxResults(1).Do()
 
 	if err != nil {
-		log.Panicln(err)
+		log.Println("IsPlaylistValid error" + err.Error())
+
 		return false, err
 	}
 
