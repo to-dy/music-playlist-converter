@@ -13,30 +13,36 @@ import (
 
 	"github.com/to-dy/music-playlist-converter/api/services"
 	"github.com/to-dy/music-playlist-converter/api/stores/tokenstore"
+	"github.com/to-dy/music-playlist-converter/initializers"
 )
 
 var once sync.Once
 
-var OauthConfig = &oauth2.Config{
-	ClientID:     os.Getenv("YOUTUBE_CLIENT_ID"),
-	ClientSecret: os.Getenv("YOUTUBE_CLIENT_SECRET"),
-	RedirectURL:  os.Getenv("YOUTUBE_REDIRECT_URI"),
-	Endpoint:     google.Endpoint,
-	Scopes:       []string{youtube.YoutubeForceSslScope},
-}
+var OauthConfig *oauth2.Config
 
 var youtubeService *youtube.Service
 
 func init() {
-	once.Do(func() {
-		ctx := context.Background()
-		service, err := youtube.NewService(ctx, option.WithCredentialsFile("google_credentials.json"), option.WithAPIKey(os.Getenv("YOUTUBE_API_KEY")))
-		youtubeService = service
+	// once.Do(func() {
+	// TODO: investigate why I have to call LoadEnv to access env vars here
+	initializers.LoadEnv()
 
-		if err != nil {
-			log.Panicf("failed to create YouTube service: %v", err)
-		}
-	})
+	OauthConfig = &oauth2.Config{
+		ClientID:     os.Getenv("YOUTUBE_CLIENT_ID"),
+		ClientSecret: os.Getenv("YOUTUBE_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("YOUTUBE_REDIRECT_URI"),
+		Endpoint:     google.Endpoint,
+		Scopes:       []string{youtube.YoutubeForceSslScope},
+	}
+
+	ctx := context.Background()
+	service, err := youtube.NewService(ctx, option.WithAPIKey(os.Getenv("YOUTUBE_API_KEY")))
+	youtubeService = service
+
+	if err != nil {
+		log.Panicf("failed to create YouTube service: %v", err)
+	}
+	// })
 }
 
 func StoreOauthToken(token *oauth2.Token) {
@@ -64,16 +70,16 @@ func getOauthToken() (*oauth2.Token, error) {
 	}
 }
 
-func IsPlaylistValid(id string) bool {
-	// youtubeService.Playlists.List([]string{"snippet"}).Id(id).MaxResults(1).Do()
+func IsPlaylistValid(id string) (bool, error) {
 	res, err := youtubeService.Playlists.List([]string{"id"}).Id(id).MaxResults(1).Do()
 
 	if err != nil {
-		log.Println(err)
-		return false
+		log.Panicln(err)
+		return false, err
 	}
 
-	return res.Items != nil && len(res.Items) > 0
+	return res.Items != nil && len(res.Items) > 0, nil
+
 }
 
 func GetPlaylistTracks(id string) []*youtube.PlaylistItem {

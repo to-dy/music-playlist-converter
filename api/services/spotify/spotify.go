@@ -3,6 +3,7 @@ package spotify
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -16,16 +17,10 @@ import (
 	"github.com/to-dy/music-playlist-converter/api/services"
 	"github.com/to-dy/music-playlist-converter/api/services/shared_types"
 	"github.com/to-dy/music-playlist-converter/api/stores/tokenstore"
+	"github.com/to-dy/music-playlist-converter/initializers"
 )
 
 var spotifyBaseURL = "https://api.spotify.com/v1"
-
-var clientCredentialsConfig = &clientcredentials.Config{
-	ClientID:     os.Getenv("SPOTIFY_CLIENT_ID"),
-	ClientSecret: os.Getenv("SPOTIFY_CLIENT_SECRET"),
-	TokenURL:     spotifyOauth.Endpoint.TokenURL,
-	AuthStyle:    oauth2.AuthStyleInParams,
-}
 
 type tokenResponse struct {
 	AccessToken string `json:"access_token"`
@@ -61,13 +56,26 @@ type PlaylistTracksResponse struct {
 	Total    int    `json:"total"`
 }
 
-func OauthConfig() *oauth2.Config {
-	return &oauth2.Config{
+var OauthConfig *oauth2.Config
+var clientCredentialsConfig *clientcredentials.Config
+
+func init() {
+	// TODO: investigate why I have to call LoadEnv to access env vars here
+	initializers.LoadEnv()
+
+	OauthConfig = &oauth2.Config{
 		ClientID:     os.Getenv("SPOTIFY_CLIENT_ID"),
 		ClientSecret: os.Getenv("SPOTIFY_CLIENT_SECRET"),
 		RedirectURL:  os.Getenv("SPOTIFY_REDIRECT_URI"),
 		Endpoint:     spotifyOauth.Endpoint,
 		Scopes:       []string{"playlist-modify-public", "playlist-read-private"},
+	}
+
+	clientCredentialsConfig = &clientcredentials.Config{
+		ClientID:     os.Getenv("SPOTIFY_CLIENT_ID"),
+		ClientSecret: os.Getenv("SPOTIFY_CLIENT_SECRET"),
+		TokenURL:     spotifyOauth.Endpoint.TokenURL,
+		AuthStyle:    oauth2.AuthStyleInParams,
 	}
 }
 
@@ -131,7 +139,7 @@ func getAccessToken(name string) (string, error) {
 	}
 
 	if !tokenValid && name == string(tokenstore.SPOTIFY_AC) {
-		ts := OauthConfig().TokenSource(context.Background(), token)
+		ts := OauthConfig.TokenSource(context.Background(), token)
 		token, err := ts.Token()
 
 		tokenstore.GlobalTokenStore.SetToken(string(tokenstore.SPOTIFY_AC), tokenstore.TokenEntry{
@@ -147,10 +155,14 @@ func getAccessToken(name string) (string, error) {
 }
 
 // verify if spotify playlist exists
-func IsPlaylistValid(id string) bool {
+func IsPlaylistValid(id string) (bool, error) {
 	cli := fiber.Client{}
 
-	token, _ := getAccessToken(string(tokenstore.SPOTIFY_CC))
+	token, tokenErr := getAccessToken(string(tokenstore.SPOTIFY_CC))
+
+	if tokenErr != nil {
+		return false, tokenErr
+	}
 
 	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"?fields=id").
 		Set("Authorization", "Bearer "+token).Debug()
@@ -162,14 +174,14 @@ func IsPlaylistValid(id string) bool {
 
 	if errs != nil {
 		log.Panic(errs)
-		return false
+		return false, errs[0]
 	}
 
 	if status == http.StatusOK {
-		return bodyData.Id != nil
+		return bodyData.Id != nil, nil
 	}
 
-	return false
+	return false, errors.New("error verifying playlist | status code: " + fmt.Sprint(status))
 }
 
 func GetPlaylistTracks(id string) []Item {
