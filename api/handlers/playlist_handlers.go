@@ -58,7 +58,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 		playlistExists, checkErr := youtube.IsPlaylistValid(queryParams["list"][0])
 
 		if checkErr != nil {
-			log.Panicln("youtube.IsPlaylistValid error", checkErr)
+			log.Println("youtube.IsPlaylistValid error", checkErr)
 			return c.SendStatus(fiber.StatusInternalServerError)
 		}
 
@@ -71,7 +71,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 				},
 			})
 		} else {
-			log.Println("playlist not found - " + checkErr.Error())
+			log.Println("playlist not found - ", checkErr)
 
 			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 				Errors: Errors{getBadRequestError("YouTubeMusic playlist does not exist, it might have been deleted")},
