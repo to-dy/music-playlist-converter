@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -29,13 +28,11 @@ func SetupServer() {
 	app.Use(logger.New())
 
 	// recover from panic
-	app.Use(recover.New())
+	app.Use(recover.New(recover.Config{EnableStackTrace: true}))
 
 	routes.SetupRoutes(app)
 
-	err := app.Listen(fmt.Sprintf(":%s", os.Getenv("PORT")))
-
-	if err != nil {
+	if err := app.Listen(":" + os.Getenv("PORT")); err != nil {
 		log.Fatal(err)
 	}
 
