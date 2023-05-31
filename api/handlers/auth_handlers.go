@@ -30,7 +30,7 @@ func InitiateOAuthFlow(c *fiber.Ctx) error {
 			Value: state,
 		})
 
-		url := spotify.OauthConfig().AuthCodeURL(state)
+		url := spotify.OauthConfig.AuthCodeURL(state)
 
 		return c.Redirect(url)
 
@@ -68,12 +68,12 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 		}
 
 		if state == "" || state != storedState {
-			return c.Status(fiber.StatusBadRequest).SendString("state-mismatch")
+			return c.Status(fiber.StatusForbidden).SendString("state-mismatch")
 		}
 
 		c.ClearCookie(SPOTIFY_AUTH_STATE)
 
-		token, err := spotify.OauthConfig().Exchange(c.Context(), code)
+		token, err := spotify.OauthConfig.Exchange(c.Context(), code)
 
 		if err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -87,11 +87,11 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 		storedState := c.Cookies(YOUTUBE_AUTH_STATE)
 
 		if authError != "" {
-			return c.Redirect("/#?error=" + authError)
+			return c.Status(fiber.StatusBadRequest).SendString(authError)
 		}
 
 		if state == "" || state != storedState {
-			return c.Redirect("/#error=state-mismatch")
+			return c.Status(fiber.StatusForbidden).SendString("state-mismatch")
 		}
 
 		c.ClearCookie(YOUTUBE_AUTH_STATE)
