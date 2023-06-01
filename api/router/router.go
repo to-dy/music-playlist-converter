@@ -3,26 +3,28 @@ package router
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/session"
 
 	"github.com/to-dy/music-playlist-converter/api/router/routes"
 )
 
-// var Store *session.Store
+var SessionStore *session.Store
 
 func SetupServer() {
 	app := fiber.New()
 
 	// initialize sessions middleware
-	// store := session.New(session.Config{
-	// 	Expiration:     time.Hour,
-	// 	CookieSameSite: "Lax",
-	// 	CookiePath:     "/",
-	// 	CookieHTTPOnly: true,
-	// })
+	SessionStore = session.New(session.Config{
+		Expiration:     time.Hour,
+		CookieSameSite: "Lax",
+		CookiePath:     "/",
+		CookieHTTPOnly: true,
+	})
 
 	// server logging
 	app.Use(logger.New())
