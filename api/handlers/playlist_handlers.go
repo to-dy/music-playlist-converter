@@ -10,6 +10,7 @@ import (
 
 	"github.com/to-dy/music-playlist-converter/api/services/spotify"
 	"github.com/to-dy/music-playlist-converter/api/services/youtube"
+	"github.com/to-dy/music-playlist-converter/api/stores/session"
 )
 
 var supportedPlaylistsHost = []string{"music.youtube.com", "www.youtube.com", "youtube.com", "open.spotify.com"}
@@ -65,6 +66,8 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 		if playlistExists {
 			log.Println("playlist exists - " + queryParams["list"][0])
 
+			startSession(c)
+
 			return c.Status(fiber.StatusOK).JSON(&APIResponse{
 				Data: map[string]interface{}{
 					"isPlaylistValid": true,
@@ -96,6 +99,8 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 		}
 
 		if playlistExists {
+			startSession(c)
+
 			return c.Status(fiber.StatusOK).JSON(&APIResponse{
 				Data: map[string]interface{}{
 					"isPlaylistValid": true,
@@ -111,6 +116,28 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 
 	// if for any reason we reach here, return a server error
 	return c.SendStatus(fiber.StatusInternalServerError)
+}
+
+func ConvertPlaylist(c *fiber.Ctx) error {
+	// urlQ := c.Query("url")
+	// to := c.Query("to")
+
+	return nil
+}
+
+func startSession(c *fiber.Ctx) error {
+	urlQ := c.Query("url")
+
+	session, err := session.Store.Get(c)
+
+	if err != nil {
+		log.Println("Error getting session - " + err.Error())
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	session.Set("pl_url", urlQ)
+
+	return session.Save()
 }
 
 func getBadRequestError(detail string) *ErrorObject {

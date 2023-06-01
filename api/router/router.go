@@ -3,7 +3,6 @@ package router
 import (
 	"log"
 	"os"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -17,14 +16,6 @@ var SessionStore *session.Store
 
 func SetupServer() {
 	app := fiber.New()
-
-	// initialize sessions middleware
-	SessionStore = session.New(session.Config{
-		Expiration:     time.Hour,
-		CookieSameSite: "Lax",
-		CookiePath:     "/",
-		CookieHTTPOnly: true,
-	})
 
 	// server logging
 	app.Use(logger.New())
