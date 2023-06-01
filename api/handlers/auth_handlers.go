@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"os"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -32,7 +33,7 @@ func InitiateOAuthFlow(c *fiber.Ctx) error {
 
 		url := spotify.OauthConfig.AuthCodeURL(state)
 
-		return c.Redirect(url)
+		return c.Redirect(url, fiber.StatusTemporaryRedirect)
 
 	case "/youtube":
 		c.Cookie(&fiber.Cookie{
@@ -42,7 +43,7 @@ func InitiateOAuthFlow(c *fiber.Ctx) error {
 
 		url := youtube.OauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
 
-		return c.Redirect(url)
+		return c.Redirect(url, fiber.StatusTemporaryRedirect)
 
 	default:
 		return c.SendStatus(fiber.StatusNotFound)
@@ -64,11 +65,11 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 		storedState := c.Cookies(SPOTIFY_AUTH_STATE)
 
 		if authError != "" {
-			return c.Status(fiber.StatusBadRequest).SendString(authError)
+			return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?error=" + authError)
 		}
 
 		if state == "" || state != storedState {
-			return c.Status(fiber.StatusForbidden).SendString("state-mismatch")
+			return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?error=state-mismatch")
 		}
 
 		c.ClearCookie(SPOTIFY_AUTH_STATE)
@@ -76,22 +77,22 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 		token, err := spotify.OauthConfig.Exchange(c.Context(), code)
 
 		if err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?error=" + err.Error())
 		}
 
 		spotify.StoreOauthToken(token)
 
-		return c.SendStatus(fiber.StatusOK)
+		return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?success=true")
 
 	case "/youtube_callback":
 		storedState := c.Cookies(YOUTUBE_AUTH_STATE)
 
 		if authError != "" {
-			return c.Status(fiber.StatusBadRequest).SendString(authError)
+			return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?error=" + authError)
 		}
 
 		if state == "" || state != storedState {
-			return c.Status(fiber.StatusForbidden).SendString("state-mismatch")
+			return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?error=state-mismatch")
 		}
 
 		c.ClearCookie(YOUTUBE_AUTH_STATE)
@@ -104,16 +105,10 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 
 		youtube.StoreOauthToken(token)
 
-		return c.SendStatus(fiber.StatusOK)
+		return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?success=true")
 
 	default:
-		return c.SendStatus(fiber.StatusNotFound)
+		return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?error=unsupported-callback")
 	}
 
 }
-
-func HandleOAuthError(c *fiber.Ctx) {
-}
-
-// func CompleteAuthentications(c *fiber.Ctx) {
-// }
