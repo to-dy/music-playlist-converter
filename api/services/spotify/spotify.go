@@ -79,15 +79,17 @@ func init() {
 	}
 }
 
-func StoreOauthToken(token *oauth2.Token) {
-	tokenstore.GlobalTokenStore.SetToken(string(tokenstore.SPOTIFY_AC), tokenstore.TokenEntry{
+func StoreAuthCodeToken(token *oauth2.Token, sessionId string) {
+	prefix := sessionId + "_"
+
+	tokenstore.GlobalTokenStore.SetToken(prefix+string(tokenstore.SPOTIFY_AC), tokenstore.TokenEntry{
 		Token:      token,
 		Expiration: token.Expiry,
 	})
 
 }
 
-func fetchCredentialToken() (string, error) {
+func fetchClientToken() (string, error) {
 	// cli := fiber.Client{}
 	// args := fiber.AcquireArgs()
 
@@ -124,28 +126,19 @@ func fetchCredentialToken() (string, error) {
 	return token.AccessToken, err
 }
 
-func getAccessToken(name string) (string, error) {
-	token, tokenValid := tokenstore.GlobalTokenStore.GetToken(name)
+func getAuthCodeToken(sessionId string) (string, error) {
+	token, tokenValid := tokenstore.GlobalTokenStore.GetToken(sessionId + "_" + string(tokenstore.SPOTIFY_AC))
 
 	if tokenValid {
 		return token.AccessToken, nil
 	}
 
-	if !tokenValid && name == string(tokenstore.SPOTIFY_CC) {
-		token, err := fetchCredentialToken()
-
-		return token, err
-
-	}
-
-	if !tokenValid && name == string(tokenstore.SPOTIFY_AC) {
+	if !tokenValid && token != nil {
+		// refresh token
 		ts := OauthConfig.TokenSource(context.Background(), token)
 		token, err := ts.Token()
 
-		tokenstore.GlobalTokenStore.SetToken(string(tokenstore.SPOTIFY_AC), tokenstore.TokenEntry{
-			Token:      token,
-			Expiration: token.Expiry,
-		})
+		StoreAuthCodeToken(token, sessionId)
 
 		return token.AccessToken, err
 
@@ -154,11 +147,23 @@ func getAccessToken(name string) (string, error) {
 	return "", errors.New("unknown token name")
 }
 
+func getClientToken() (string, error) {
+	token, tokenValid := tokenstore.GlobalTokenStore.GetToken(string(tokenstore.SPOTIFY_CC))
+
+	if tokenValid {
+		return token.AccessToken, nil
+	} else {
+		token, err := fetchClientToken()
+
+		return token, err
+	}
+}
+
 // verify if spotify playlist exists
 func IsPlaylistValid(id string) (bool, error) {
 	cli := fiber.Client{}
 
-	token, tokenErr := getAccessToken(string(tokenstore.SPOTIFY_CC))
+	token, tokenErr := getClientToken()
 
 	if tokenErr != nil {
 		return false, tokenErr
@@ -187,7 +192,7 @@ func IsPlaylistValid(id string) (bool, error) {
 func GetPlaylistTracks(id string) []Item {
 	cli := fiber.Client{}
 
-	token, _ := getAccessToken(string(tokenstore.SPOTIFY_CC))
+	token, _ := getClientToken()
 
 	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"/tracks?limit=50&fields=total,limit,next,offset,previous,items(track(name,is_local,duration_ms,album(album_type,name),artists(name)))").
 		Set("Authorization", "Bearer "+token).Debug()
@@ -241,7 +246,7 @@ func ToSearchTrackList(tracks []*Item) *services.SearchTrackList {
 func SearchTrack(query string, artist string) (track *Track, found bool) {
 	cli := fiber.Client{}
 
-	token, _ := getAccessToken(string(tokenstore.SPOTIFY_CC))
+	token, _ := getClientToken()
 
 	makeQuery := url.QueryEscape("track:" + query + " artist:" + artist)
 
@@ -262,10 +267,10 @@ func SearchTrack(query string, artist string) (track *Track, found bool) {
 	return nil, false
 }
 
-func CreatePlaylist(name string, userId string) (id *string, err []error) {
+func CreatePlaylist(name string, userId string, sessionId string) (id *string, err []error) {
 	cli := fiber.Client{}
 
-	token, _ := getAccessToken(string(tokenstore.SPOTIFY_AC))
+	token, _ := getAuthCodeToken(sessionId)
 
 	body := map[string]string{
 		"name": name,
@@ -294,10 +299,10 @@ func CreatePlaylist(name string, userId string) (id *string, err []error) {
 	return id, errs
 }
 
-func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList) *string {
+func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, sessionId string) *string {
 	cli := fiber.Client{}
 
-	token, _ := getAccessToken(string(tokenstore.SPOTIFY_AC))
+	token, _ := getAuthCodeToken(sessionId)
 
 	uris := ""
 
@@ -337,12 +342,4 @@ func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList) *st
 	}
 
 	return nil
-}
-
-// handle unauthorized response
-func handleUnauthorized(agent *fiber.Agent, tokenName tokenstore.TokenName) *fiber.Agent {
-	// refetch accessToken and try again
-	token, _ := getAccessToken(string(tokenName))
-
-	return agent.Reuse().Set("Authorization", "Bearer "+token)
 }

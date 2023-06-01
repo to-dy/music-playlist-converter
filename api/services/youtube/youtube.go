@@ -2,6 +2,7 @@ package youtube
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"sync"
@@ -45,29 +46,33 @@ func init() {
 	// })
 }
 
-func StoreOauthToken(token *oauth2.Token) {
-	tokenstore.GlobalTokenStore.SetToken(string(tokenstore.YOUTUBE_AC), tokenstore.TokenEntry{
+func StoreAuthCodeToken(token *oauth2.Token, sessionId string) {
+	prefix := sessionId + "_"
+
+	tokenstore.GlobalTokenStore.SetToken(prefix+string(tokenstore.YOUTUBE_AC), tokenstore.TokenEntry{
 		Token:      token,
 		Expiration: token.Expiry,
 	})
 }
 
-func getOauthToken() (*oauth2.Token, error) {
-	token, tokenValid := tokenstore.GlobalTokenStore.GetToken(string(tokenstore.YOUTUBE_AC))
+func getAuthCodeToken(sessionId string) (*oauth2.Token, error) {
+	token, tokenValid := tokenstore.GlobalTokenStore.GetToken(sessionId + "_" + string(tokenstore.YOUTUBE_AC))
 
 	if tokenValid {
 		return token, nil
+	}
 
-	} else {
+	if !tokenValid && token != nil {
+		// refresh token
 		ts := OauthConfig.TokenSource(context.Background(), token)
 		token, err := ts.Token()
 
-		tokenstore.GlobalTokenStore.SetToken(string(tokenstore.YOUTUBE_AC), tokenstore.TokenEntry{
-			Token: token,
-		})
+		StoreAuthCodeToken(token, sessionId)
 
 		return token, err
 	}
+
+	return nil, errors.New("unknown token name")
 }
 
 func IsPlaylistValid(id string) (bool, error) {
@@ -143,8 +148,8 @@ func SearchTrack(query string, artist string) (track *youtube.SearchResult, foun
 	return nil, false
 }
 
-func CreatePlaylist(name string) (*string, error) {
-	token, tokenErr := getOauthToken()
+func CreatePlaylist(name string, sessionId string) (*string, error) {
+	token, tokenErr := getAuthCodeToken(sessionId)
 
 	if tokenErr != nil {
 		log.Println(tokenErr)
@@ -171,7 +176,13 @@ func CreatePlaylist(name string) (*string, error) {
 	return &res.Id, nil
 }
 
-func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList) {
+func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, sessionId string) error {
+	token, tokenErr := getAuthCodeToken(sessionId)
+
+	if tokenErr != nil {
+		log.Println(tokenErr)
+		return tokenErr
+	}
 
 	for _, track := range tracks {
 		artist := ""
@@ -191,10 +202,22 @@ func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList) {
 		}
 
 		if found {
-			youtubeService.PlaylistItems.Insert([]string{"snippet", "status"}, PlaylistItem)
+			call := youtubeService.PlaylistItems.Insert([]string{"snippet", "status"}, PlaylistItem)
+
+			call.Header().Add("Authorization", "Bearer "+token.AccessToken)
+
+			_, err := call.Do()
+
+			if err != nil {
+				log.Println("error adding track to playlist", err)
+				continue
+			}
+
 		} else {
 			continue
 		}
 
 	}
+
+	return nil
 }

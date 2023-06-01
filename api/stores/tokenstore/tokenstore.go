@@ -46,6 +46,7 @@ func (ts *TokenStore) SetToken(name string, token TokenEntry) {
 	ts.mutex.Lock()
 	defer ts.mutex.Unlock()
 
+	// oauth tokens with Authorization code flow will be prefixed with the server session id
 	ts.store[name] = token
 }
 
@@ -56,7 +57,7 @@ func (ts *TokenStore) GetToken(name string) (*oauth2.Token, bool) {
 	entry, found := ts.store[name]
 
 	if !found {
-		return &oauth2.Token{}, false
+		return nil, false
 	}
 
 	if entry.Expiration.Before(time.Now()) && (name != string(YOUTUBE_CC)) {
