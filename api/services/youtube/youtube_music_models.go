@@ -87,7 +87,7 @@ type YTMusic_PlaylistResults struct {
 								} `json:"musicPlaylistShelfRenderer"`
 							} `json:"contents"`
 						} `json:"sectionListRenderer"`
-					} `json:"content`
+					} `json:"content"`
 				} `json:"tabRenderer"`
 			} `json:"tabs"`
 		} `json:"singleColumnBrowseResultsRenderer"`
