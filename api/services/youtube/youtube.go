@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/gookit/goutil/arrutil"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -75,17 +76,33 @@ func getAuthCodeToken(sessionId string) (*oauth2.Token, error) {
 	return nil, errors.New("unknown token name")
 }
 
-func IsPlaylistValid(id string) (bool, error) {
-	res, err := youtubeService.Playlists.List([]string{"id"}).Id(id).MaxResults(1).Do()
+func FindPlaylist(id string) (*youtube.Playlist, error) {
+	res, err := youtubeService.Playlists.List([]string{"id", "contentDetails", "snippet"}).Id(id).MaxResults(1).Do()
 
 	if err != nil {
 		log.Println("IsPlaylistValid error" + err.Error())
 
-		return false, err
+		return nil, err
 	}
 
-	return res.Items != nil && len(res.Items) > 0, nil
+	// find playlist by id
+	if res.Items != nil && len(res.Items) > 0 {
+		found, err := arrutil.Find(res.Items, func(item interface{}) bool {
+			pl := item.(*youtube.Playlist)
 
+			return pl.Id == id
+		})
+
+		if err != nil {
+			log.Panicln("error searching res.Items in IsPlaylistValid")
+			return nil, err
+		}
+
+		return found.(*youtube.Playlist), nil
+
+	} else {
+		return nil, nil
+	}
 }
 
 func GetPlaylistTracks(id string) []*youtube.PlaylistItem {

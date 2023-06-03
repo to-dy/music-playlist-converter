@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"os"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/to-dy/music-playlist-converter/api/services/spotify"
 	"github.com/to-dy/music-playlist-converter/api/services/youtube"
+	"github.com/to-dy/music-playlist-converter/api/stores/session"
 )
 
 const (
@@ -23,8 +25,13 @@ func InitiateOAuthFlow(c *fiber.Ctx) error {
 
 	state := utils.UUIDv4()
 
-	switch path {
+	sess, err := session.Store.Get(c)
+	if err != nil {
+		log.Println("Error getting session - " + err.Error())
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
 
+	switch path {
 	case "/spotify":
 		c.Cookie(&fiber.Cookie{
 			Name:  SPOTIFY_AUTH_STATE,
@@ -32,6 +39,9 @@ func InitiateOAuthFlow(c *fiber.Ctx) error {
 		})
 
 		url := spotify.OauthConfig.AuthCodeURL(state)
+
+		sess.Set(session.ConvertTo, "spotify")
+		sess.Save()
 
 		return c.Redirect(url, fiber.StatusTemporaryRedirect)
 
@@ -42,6 +52,9 @@ func InitiateOAuthFlow(c *fiber.Ctx) error {
 		})
 
 		url := youtube.OauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
+
+		sess.Set(session.ConvertTo, "youtube")
+		sess.Save()
 
 		return c.Redirect(url, fiber.StatusTemporaryRedirect)
 
@@ -58,6 +71,12 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 	code := c.Query("code")
 	state := c.Query("state")
 	authError := c.Query("error")
+
+	sess, err := session.Store.Get(c)
+	if err != nil {
+		log.Println("Error getting session - " + err.Error())
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
 
 	switch path {
 
@@ -80,7 +99,10 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 			return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?error=" + err.Error())
 		}
 
-		spotify.StoreOauthToken(token)
+		spotify.StoreAuthCodeToken(token, sess.ID())
+
+		sess.Set(session.SpotifyAuthCodeToken, token.AccessToken)
+		sess.Save()
 
 		return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?success=true")
 
@@ -103,12 +125,14 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
 
-		youtube.StoreOauthToken(token)
+		youtube.StoreAuthCodeToken(token, sess.ID())
+
+		sess.Set(session.YoutubeAuthCodeToken, token.AccessToken)
+		sess.Save()
 
 		return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?success=true")
 
 	default:
 		return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?error=unsupported-callback")
 	}
-
 }

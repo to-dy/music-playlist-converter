@@ -6,6 +6,20 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/session"
 )
 
+// Session keys
+const (
+	PlaylistURL         = "pl_url"
+	PlaylistSource      = "pl_source"
+	PlaylistID          = "pl_id"
+	PlaylistName        = "pl_name"
+	PlaylistTracksCount = "pl_tracks_count"
+
+	ConvertTo               = "convert_to"
+	SpotifyAuthCodeToken    = "spotify_auth_code_token"
+	SpotifyCredentialsToken = "spotify_credentials_token"
+	YoutubeAuthCodeToken    = "youtube_auth_code_token"
+)
+
 // var Store *session.Store
 
 // func init() {

@@ -47,6 +47,14 @@ type Item struct {
 	Track Track `json:"track"`
 }
 
+type PlaylistResponse struct {
+	Id     string `json:"id"`
+	Name   string `json:"name"`
+	Tracks struct {
+		Total int `json:"total"`
+	} `json:"tracks"`
+}
+
 type PlaylistTracksResponse struct {
 	Items    []Item `json:"items"`
 	Limit    int    `json:"limit"`
@@ -160,33 +168,32 @@ func getClientToken() (string, error) {
 }
 
 // verify if spotify playlist exists
-func IsPlaylistValid(id string) (bool, error) {
+func FindPlaylist(id string) (*PlaylistResponse, error) {
 	cli := fiber.Client{}
 
 	token, tokenErr := getClientToken()
 
 	if tokenErr != nil {
-		return false, tokenErr
+		return nil, tokenErr
 	}
 
-	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"?fields=id").
+	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"?fields=id,name,tracks(total)").
 		Set("Authorization", "Bearer "+token).Debug()
 
-	var bodyData struct {
-		Id *string `json:"id"`
-	}
+	var bodyData PlaylistResponse
+
 	status, _, errs := res.Struct(&bodyData)
 
 	if errs != nil {
 		log.Panic(errs)
-		return false, errs[0]
+		return nil, errs[0]
 	}
 
 	if status == http.StatusOK {
-		return bodyData.Id != nil, nil
+		return &bodyData, nil
 	}
 
-	return false, errors.New("error verifying playlist | status code: " + fmt.Sprint(status))
+	return nil, errors.New("error verifying playlist | status code: " + fmt.Sprint(status))
 }
 
 func GetPlaylistTracks(id string) []Item {

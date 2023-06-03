@@ -12,4 +12,8 @@ func SetupPlaylistRoutes(router fiber.Router) {
 
 	playlistRouter.Get("/verify", handlers.VerifyPlaylist)
 
+	playlistRouter.Get("/convert/preview", handlers.PreviewPlaylistConversion)
+
+	playlistRouter.Post("/convert/start", handlers.ConvertPlaylist)
+
 }
