@@ -103,10 +103,19 @@ func YTMusic_SearchTrack(query string, artist string) (*Music, bool) {
 }
 
 func YTMusic_GetPlaylistTracks(id string) ([]*Music, error) {
+	var tracks = []*Music{}
+
 	cli := fiber.Client{}
 
 	if !strings.HasPrefix(id, "VL") {
 		id = "VL" + id
+	}
+
+	allowedNumberOfConversions, intConvErr := strconv.Atoi(os.Getenv("ALLOWED_NUMBER_OF_CONVERSIONS"))
+
+	if intConvErr != nil {
+		log.Println(intConvErr)
+		return nil, intConvErr
 	}
 
 	body := generateBodyContext([]bodyData{{Key: "browseId", Value: id}})
@@ -118,7 +127,7 @@ func YTMusic_GetPlaylistTracks(id string) ([]*Music, error) {
 
 	var ytmRes YTMusic_PlaylistResults
 
-	status, b, errs := res.Struct(&ytmRes)
+	status, _, errs := res.Struct(&ytmRes)
 
 	if errs != nil {
 		log.Panic(errs)
@@ -126,18 +135,23 @@ func YTMusic_GetPlaylistTracks(id string) ([]*Music, error) {
 		return nil, errs[0]
 	}
 
-	filePath := "res_output_3.json"
-	err := os.WriteFile(filePath, b, 0644)
-
-	if err != nil {
-		log.Println("Error writing file:", err)
-	} else {
-		log.Println("JSON data written to", filePath)
-	}
+	// TODO: support fetching more tracks via continuations
+	//  continuations := ytmRes.Contents.SingleColumnBrowseResultsRenderer.Tabs[0].TabRenderer.Content.SectionListRenderer.Continuations
 
 	if status == http.StatusOK {
 
-		tracks := parseListMusicsFromPlaylistBody(&ytmRes)
+		tracks = parseListMusicsFromPlaylistBody(&ytmRes)
+
+		// allowedNumberOfConversions = 0 means convert all tracks
+		if allowedNumberOfConversions != 0 {
+			// check so we don't go out of range
+			if allowedNumberOfConversions > len(tracks) {
+				allowedNumberOfConversions = len(tracks)
+			}
+
+			tracks = tracks[0:allowedNumberOfConversions]
+		}
+
 		return tracks, nil
 	}
 

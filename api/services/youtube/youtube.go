@@ -105,31 +105,6 @@ func FindPlaylist(id string) (*youtube.Playlist, error) {
 	}
 }
 
-func GetPlaylistTracks(id string) []*youtube.PlaylistItem {
-	res, err := youtubeService.PlaylistItems.List([]string{"snippet"}).PlaylistId(id).MaxResults(50).Do()
-
-	if err != nil {
-		log.Println(err)
-
-		return nil
-	}
-
-	// if there are more tracks fetch them, currently limited 100 tracks
-	if len(res.Items) < int(res.PageInfo.TotalResults) {
-		res2, err2 := youtubeService.PlaylistItems.List([]string{"snippet"}).PlaylistId(id).MaxResults(50).PageToken(res.NextPageToken).Do()
-
-		if err2 != nil {
-			log.Println(err2)
-
-			return nil
-		}
-
-		res.Items = append(res.Items, res2.Items...)
-	}
-
-	return res.Items
-}
-
 func ToSearchTrackList(tracks []*Music) *services.SearchTrackList {
 	searchTrackList := make(services.SearchTrackList, 0, len(tracks))
 
@@ -145,24 +120,6 @@ func ToSearchTrackList(tracks []*Music) *services.SearchTrackList {
 	}
 
 	return &searchTrackList
-}
-
-func SearchTrack(query string, artist string) (track *youtube.SearchResult, found bool) {
-	// search for track on youtube by provided query(artist + track)
-	res, err := youtubeService.Search.List([]string{"snippet"}).Q(query).MaxResults(1).Type("video").Do()
-
-	if err != nil {
-		log.Println(err)
-
-		return nil, false
-	}
-
-	if res.Items != nil && len(res.Items) > 0 {
-		return res.Items[0], true
-
-	}
-
-	return nil, false
 }
 
 func CreatePlaylist(name string, sessionId string) (*string, error) {

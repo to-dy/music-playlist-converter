@@ -14,10 +14,8 @@ const (
 	PlaylistName        = "pl_name"
 	PlaylistTracksCount = "pl_tracks_count"
 
-	ConvertTo               = "convert_to"
-	SpotifyAuthCodeToken    = "spotify_auth_code_token"
-	SpotifyCredentialsToken = "spotify_credentials_token"
-	YoutubeAuthCodeToken    = "youtube_auth_code_token"
+	ConvertTo     = "convert_to"
+	AuthCodeToken = "spotify_auth_code_token"
 )
 
 // var Store *session.Store

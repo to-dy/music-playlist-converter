@@ -86,6 +86,12 @@ type YTMusic_PlaylistResults struct {
 									Contents []YTMusic_MusicShelfContent `json:"contents"`
 								} `json:"musicPlaylistShelfRenderer"`
 							} `json:"contents"`
+
+							Continuations []struct {
+								NextContinuationData struct {
+									Continuation string `json:"continuation"`
+								} `json:"nextContinuationData"`
+							} `json:"continuations"`
 						} `json:"sectionListRenderer"`
 					} `json:"content"`
 				} `json:"tabRenderer"`

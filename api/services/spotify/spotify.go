@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/oauth2"
@@ -196,10 +197,17 @@ func FindPlaylist(id string) (*PlaylistResponse, error) {
 	return nil, errors.New("error verifying playlist | status code: " + fmt.Sprint(status))
 }
 
-func GetPlaylistTracks(id string) []Item {
+func GetPlaylistTracks(id string) ([]Item, error) {
 	cli := fiber.Client{}
 
 	token, _ := getClientToken()
+
+	allowedNumberOfConversions, intConvErr := strconv.Atoi(os.Getenv("ALLOWED_NUMBER_OF_CONVERSIONS"))
+
+	if intConvErr != nil {
+		log.Println(intConvErr)
+		return nil, intConvErr
+	}
 
 	res := cli.Get(spotifyBaseURL+"/playlists/"+id+"/tracks?limit=50&fields=total,limit,next,offset,previous,items(track(name,is_local,duration_ms,album(album_type,name),artists(name)))").
 		Set("Authorization", "Bearer "+token).Debug()
@@ -211,14 +219,12 @@ func GetPlaylistTracks(id string) []Item {
 		log.Panic(errs)
 	}
 
-	// tracks := make([]Item, 0, bodyData.Total)
 	tracks := bodyData.Items
-	// tracks := arrutil.Map(bodyData.Items, func(item Item) (track Track, find bool) {
-	// 	return item.Track, true
-	// })
 
-	// if there are more tracks fetch them, currently limited 100 tracks
-	if len(tracks) < bodyData.Total {
+	// TODO: update this implementation to properly fetch more tracks, possibly using a while loop
+
+	// if there are more tracks fetch them
+	if (len(tracks) < allowedNumberOfConversions) && (len(tracks) < bodyData.Total) {
 		_, _, errs = cli.Get(bodyData.Next).Set("Authorization", "Bearer "+token).Debug().
 			Struct(&bodyData)
 
@@ -230,7 +236,17 @@ func GetPlaylistTracks(id string) []Item {
 
 	}
 
-	return tracks
+	// allowedNumberOfConversions = 0 means convert all tracks
+	if allowedNumberOfConversions != 0 {
+		// check so we don't go out of range
+		if allowedNumberOfConversions > len(tracks) {
+			allowedNumberOfConversions = len(tracks)
+		}
+
+		tracks = tracks[0:allowedNumberOfConversions]
+	}
+
+	return tracks, nil
 }
 
 func ToSearchTrackList(tracks []*Item) *services.SearchTrackList {
