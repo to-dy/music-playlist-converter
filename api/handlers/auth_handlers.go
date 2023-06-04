@@ -101,7 +101,7 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 
 		spotify.StoreAuthCodeToken(token, sess.ID())
 
-		sess.Set(session.SpotifyAuthCodeToken, token.AccessToken)
+		sess.Set(session.AuthCodeToken, token.AccessToken)
 		sess.Save()
 
 		return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?success=true")
@@ -127,7 +127,7 @@ func HandleOAuthCallback(c *fiber.Ctx) error {
 
 		youtube.StoreAuthCodeToken(token, sess.ID())
 
-		sess.Set(session.YoutubeAuthCodeToken, token.AccessToken)
+		sess.Set(session.AuthCodeToken, token.AccessToken)
 		sess.Save()
 
 		return c.Redirect(os.Getenv("UI_BASE_URL") + "/auth?success=true")
