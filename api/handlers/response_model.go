@@ -1,6 +1,6 @@
 package handlers
 
-type APIResponse struct {
+type ApiOkResponse struct {
 	Data interface{} `json:"data,omitempty"`
 }
 
@@ -19,6 +19,6 @@ type ErrorSource struct {
 
 type Errors []*ErrorObject
 
-type ErrorResponse struct {
+type ApiErrorResponse struct {
 	Errors Errors `json:"errors"`
 }

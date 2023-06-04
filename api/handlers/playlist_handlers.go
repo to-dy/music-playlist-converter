@@ -13,9 +13,19 @@ import (
 	"github.com/to-dy/music-playlist-converter/api/stores/session"
 )
 
+type supportedPlaylist struct {
+	YouTube string
+	Spotify string
+}
+
 var supportedPlaylistsHost = []string{"music.youtube.com", "www.youtube.com", "youtube.com", "open.spotify.com"}
 
-var supportedConversions = []string{"youtube", "spotify"}
+var supportedConversions = &supportedPlaylist{
+	YouTube: "youtube",
+	Spotify: "spotify",
+}
+
+var supportedConversionsList = []string{supportedConversions.YouTube, supportedConversions.Spotify}
 
 type sessionPlaylist struct {
 	Id         string
@@ -31,7 +41,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 	if urlQ == "" {
 		log.Println("url query parameter is empty")
 
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
 			Errors: Errors{getBadRequestError("The `url` query parameter is required.", nil)},
 		})
 	}
@@ -47,7 +57,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 	if !arrutil.Contains(supportedPlaylistsHost, parsedURL.Host) {
 		log.Println("unsupported playlist host - " + parsedURL.Host)
 
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
 			Errors: Errors{getBadRequestError("Invalid or unsupported playlist url", nil)},
 		})
 	}
@@ -61,7 +71,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 		if parsedURL.Path != "/playlist" || len(queryParams) < 1 || queryParams["list"] == nil {
 			log.Println("Invalid YouTubeMusic playlist - " + parsedURL.Path)
 
-			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
 				Errors: Errors{getBadRequestError("Invalid YouTubeMusic playlist url", nil)},
 			})
 		}
@@ -81,7 +91,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 				Id:         playlist.Id,
 				Title:      playlist.Snippet.Title,
 				Url:        parsedURL.String(),
-				Source:     supportedConversions[0],
+				Source:     supportedConversions.YouTube,
 				TrackCount: int(playlist.ContentDetails.ItemCount),
 			}
 
@@ -89,7 +99,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 				return c.SendStatus(fiber.StatusInternalServerError)
 			}
 
-			return c.Status(fiber.StatusOK).JSON(&APIResponse{
+			return c.Status(fiber.StatusOK).JSON(&ApiOkResponse{
 				Data: map[string]interface{}{
 					"isPlaylistValid": true,
 				},
@@ -97,7 +107,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 		} else {
 			log.Println("playlist not found - ", checkErr)
 
-			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
 				Errors: Errors{getBadRequestError("YouTubeMusic playlist does not exist, it might have been deleted", nil)},
 			})
 		}
@@ -107,7 +117,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 
 		if len(pathParts) < 3 || pathParts[1] != "playlist" {
 
-			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
 				Errors: Errors{getBadRequestError("Invalid Spotify playlist url", nil)},
 			})
 		}
@@ -125,7 +135,7 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 				Id:         playlist.Id,
 				Title:      playlist.Name,
 				Url:        parsedURL.String(),
-				Source:     supportedConversions[1],
+				Source:     supportedConversions.Spotify,
 				TrackCount: int(playlist.Tracks.Total),
 			}
 
@@ -133,14 +143,14 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 				return c.SendStatus(fiber.StatusInternalServerError)
 			}
 
-			return c.Status(fiber.StatusOK).JSON(&APIResponse{
+			return c.Status(fiber.StatusOK).JSON(&ApiOkResponse{
 				Data: map[string]interface{}{
 					"isPlaylistValid": true,
 				},
 			})
 		} else {
 
-			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
 				Errors: Errors{getBadRequestError("Spotify playlist does not exist, it might have been deleted", nil)},
 			})
 		}
@@ -163,19 +173,12 @@ func PreviewPlaylistConversion(c *fiber.Ctx) error {
 	playlistSource := sess.Get(session.PlaylistSource)
 	playlistName := sess.Get(session.PlaylistName)
 	playlistTracksCount := sess.Get(session.PlaylistTracksCount)
+	token := sess.Get(session.AuthCodeToken)
 	// value set on oauth start
 	convertTo := sess.Get(session.ConvertTo)
 
-	var token string
-
-	if convertTo != nil && convertTo == supportedPlaylistsHost[1] /* youtube */ {
-		token = sess.Get(session.SpotifyAuthCodeToken).(string)
-	} else if convertTo != nil && convertTo == supportedPlaylistsHost[0] /* spotify */ {
-		token = sess.Get(session.YoutubeAuthCodeToken).(string)
-	}
-
-	if sessionUrl == nil || token == "" || playlistSource != nil || playlistName == nil || playlistTracksCount == nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+	if sessionUrl == nil || token == nil || playlistSource != nil || playlistName == nil || playlistTracksCount == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
 			Errors: Errors{getBadRequestError("invalid session", &ErrorSource{})},
 		})
 	}
@@ -188,34 +191,15 @@ func PreviewPlaylistConversion(c *fiber.Ctx) error {
 		"convertTo":           convertTo,
 	}
 
-	return c.Status(fiber.StatusOK).JSON(&APIResponse{Data: bodyRes})
+	return c.Status(fiber.StatusOK).JSON(&ApiOkResponse{Data: bodyRes})
 }
 
 /*
-		/convert?to=youtube, /convert?to=spotify
-	 converts valid playlist url to a supported source
+converts valid playlist url to a supported source
 
-	 it uses the url stored in the session from VerifyPlaylist()
+it uses the PlaylistURL stored in the session
 */
 func ConvertPlaylist(c *fiber.Ctx) error {
-	to := c.Query("to")
-
-	if to == "" {
-		log.Println("to query parameter is empty")
-
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Errors: Errors{getBadRequestError("The `to` query parameter is required.", &ErrorSource{Parameter: "?to"})},
-		})
-	}
-
-	if !arrutil.Contains(supportedConversions, to) {
-		log.Println("unsupported playlist conversion - " + to)
-
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Errors: Errors{getBadRequestError("Invalid or unsupported playlist conversion", &ErrorSource{Parameter: "?to"})},
-		})
-	}
-
 	sess, err := session.Store.Get(c)
 	if err != nil {
 		log.Println("Error getting session - " + err.Error())
@@ -223,24 +207,71 @@ func ConvertPlaylist(c *fiber.Ctx) error {
 	}
 
 	sessionUrl := sess.Get(session.PlaylistURL)
+	token := sess.Get(session.AuthCodeToken)
+	convertTo := sess.Get(session.ConvertTo)
+	playlistSource := sess.Get(session.PlaylistSource)
+	playlistName := sess.Get(session.PlaylistName)
+	playlistTracksCount := sess.Get(session.PlaylistTracksCount)
+	playlistId := sess.Get(session.PlaylistID)
 
-	if sessionUrl == nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+	if sessionUrl == nil || token == nil || convertTo == nil || playlistSource == nil || playlistName == nil || playlistTracksCount == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
 			Errors: Errors{getBadRequestError("invalid session", &ErrorSource{Parameter: "session"})},
 		})
 	}
 
-	switch to {
-	case supportedConversions[0]:
+	if !arrutil.Contains(supportedConversionsList, convertTo) {
+		log.Println("unsupported playlist conversion - " + convertTo.(string))
 
-		return nil
-	case supportedConversions[1]:
-		return nil
+		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
+			Errors: Errors{getBadRequestError("unsupported playlist conversion source", &ErrorSource{})},
+		})
+	}
+
+	playlistInfo := &sessionPlaylist{
+		Id:         playlistId.(string),
+		Title:      playlistName.(string),
+		Url:        sessionUrl.(string),
+		Source:     playlistSource.(string),
+		TrackCount: playlistTracksCount.(int),
+	}
+
+	// platform we want to convert to
+	switch convertTo {
+	// youtube
+	case supportedConversions.YouTube:
+		// youtube -> spotify
+		if playlistInfo.Source == supportedConversions.Spotify {
+			return youtubeToSpotify(c, playlistInfo)
+		}
+
+		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
+			Errors: Errors{getBadRequestError("playlist conversion from Youtube to "+playlistInfo.Source+" not supported", &ErrorSource{})},
+		})
+
+		// spotify
+	case supportedConversions.Spotify:
+		//  spotify -> youtube
+		if playlistInfo.Source == supportedConversions.YouTube {
+			return spotifyToYoutube(c, playlistInfo)
+		}
+
+		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
+			Errors: Errors{getBadRequestError("playlist conversion from Youtube to "+playlistInfo.Source+" not supported", &ErrorSource{})},
+		})
 
 	}
 
 	// if for any reason we reach here, return a server error
 	return c.SendStatus(fiber.StatusInternalServerError)
+}
+
+func youtubeToSpotify(c *fiber.Ctx, playlistInfo *sessionPlaylist) error {
+	return nil
+}
+
+func spotifyToYoutube(c *fiber.Ctx, playlistInfo *sessionPlaylist) error {
+	return nil
 }
 
 func startSession(c *fiber.Ctx, pl *sessionPlaylist) error {
