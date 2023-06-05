@@ -105,7 +105,7 @@ func FindPlaylist(id string) (*youtube.Playlist, error) {
 	}
 }
 
-func ToSearchTrackList(tracks []*Music) *services.SearchTrackList {
+func ToSearchTrackList(tracks []*Music) services.SearchTrackList {
 	searchTrackList := make(services.SearchTrackList, 0, len(tracks))
 
 	for _, track := range tracks {
@@ -116,18 +116,17 @@ func ToSearchTrackList(tracks []*Music) *services.SearchTrackList {
 			Duration: track.Duration.Milliseconds(),
 		}
 
-		searchTrackList = append(searchTrackList, t)
+		searchTrackList = append(searchTrackList, &t)
 	}
 
-	return &searchTrackList
+	return searchTrackList
 }
 
-func CreatePlaylist(name string, sessionId string) (*string, error) {
+func CreatePlaylist(name string, sessionId string) (string, error) {
 	token, tokenErr := getAuthCodeToken(sessionId)
 
 	if tokenErr != nil {
-		log.Println(tokenErr)
-		return nil, tokenErr
+		return "", tokenErr
 	}
 
 	playlist := &youtube.Playlist{
@@ -144,10 +143,10 @@ func CreatePlaylist(name string, sessionId string) (*string, error) {
 	if err != nil {
 		log.Panic(err)
 
-		return nil, err
+		return "", err
 	}
 
-	return &res.Id, nil
+	return res.Id, nil
 }
 
 func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, sessionId string) error {

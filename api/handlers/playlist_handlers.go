@@ -33,6 +33,7 @@ type sessionPlaylist struct {
 	Url        string
 	Source     string
 	TrackCount int
+	NewTitle   string
 }
 
 func VerifyPlaylist(c *fiber.Ctx) error {
@@ -101,7 +102,8 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 
 			return c.Status(fiber.StatusOK).JSON(&ApiOkResponse{
 				Data: map[string]interface{}{
-					"isPlaylistValid": true,
+					"isPlaylistValid":      true,
+					"supportedConversions": []string{supportedConversions.Spotify},
 				},
 			})
 		} else {
@@ -145,7 +147,8 @@ func VerifyPlaylist(c *fiber.Ctx) error {
 
 			return c.Status(fiber.StatusOK).JSON(&ApiOkResponse{
 				Data: map[string]interface{}{
-					"isPlaylistValid": true,
+					"isPlaylistValid":      true,
+					"supportedConversions": []string{supportedConversions.YouTube},
 				},
 			})
 		} else {
@@ -206,6 +209,23 @@ func ConvertPlaylist(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
+	bodyData := struct {
+		Title string `json:"title"`
+	}{}
+
+	c.Accepts(fiber.MIMEApplicationJSON)
+
+	if err := c.BodyParser(&bodyData); err != nil {
+		log.Println("Error parsing body - " + err.Error())
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	if bodyData.Title == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
+			Errors: Errors{getBadRequestError("title is required", &ErrorSource{Parameter: "title"})},
+		})
+	}
+
 	sessionUrl := sess.Get(session.PlaylistURL)
 	token := sess.Get(session.AuthCodeToken)
 	convertTo := sess.Get(session.ConvertTo)
@@ -216,7 +236,7 @@ func ConvertPlaylist(c *fiber.Ctx) error {
 
 	if sessionUrl == nil || token == nil || convertTo == nil || playlistSource == nil || playlistName == nil || playlistTracksCount == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
-			Errors: Errors{getBadRequestError("invalid session", &ErrorSource{Parameter: "session"})},
+			Errors: Errors{getBadRequestError("invalid session", &ErrorSource{})},
 		})
 	}
 
@@ -234,6 +254,7 @@ func ConvertPlaylist(c *fiber.Ctx) error {
 		Url:        sessionUrl.(string),
 		Source:     playlistSource.(string),
 		TrackCount: playlistTracksCount.(int),
+		NewTitle:   bodyData.Title,
 	}
 
 	// platform we want to convert to
@@ -242,7 +263,7 @@ func ConvertPlaylist(c *fiber.Ctx) error {
 	case supportedConversions.YouTube:
 		// youtube -> spotify
 		if playlistInfo.Source == supportedConversions.Spotify {
-			return youtubeToSpotify(c, playlistInfo)
+			return youtubeToSpotify(c, playlistInfo, sess.ID())
 		}
 
 		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
@@ -253,7 +274,7 @@ func ConvertPlaylist(c *fiber.Ctx) error {
 	case supportedConversions.Spotify:
 		//  spotify -> youtube
 		if playlistInfo.Source == supportedConversions.YouTube {
-			return spotifyToYoutube(c, playlistInfo)
+			return spotifyToYoutube(c, playlistInfo, sess.ID())
 		}
 
 		return c.Status(fiber.StatusBadRequest).JSON(ApiErrorResponse{
@@ -266,12 +287,70 @@ func ConvertPlaylist(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusInternalServerError)
 }
 
-func youtubeToSpotify(c *fiber.Ctx, playlistInfo *sessionPlaylist) error {
-	return nil
+func youtubeToSpotify(c *fiber.Ctx, playlistInfo *sessionPlaylist, sessionId string) error {
+	spotifyUserId, userIdErr := spotify.GetUserId(sessionId)
+	if userIdErr != nil {
+		log.Println("spotifyUserId error", userIdErr)
+
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	ytTracks, getTracksErr := youtube.YTMusic_GetPlaylistTracks(playlistInfo.Id)
+
+	if getTracksErr != nil {
+		log.Println("youtubeToSpotify YTMusic_GetPlaylistTracks error", getTracksErr)
+
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	tracks := youtube.ToSearchTrackList(ytTracks)
+
+	spotifyPlId, cr8plErr := spotify.CreatePlaylist(playlistInfo.NewTitle, spotifyUserId, sessionId)
+
+	if cr8plErr != nil {
+		log.Println("spotify.CreatePlaylist error", cr8plErr)
+
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	addErr := spotify.AddTracksToPlaylist(spotifyPlId, tracks, sessionId)
+
+	if addErr != nil {
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(&ApiOkResponse{Data: map[string]interface{}{
+		"playlistUrl": "https://open.spotify.com/playlist/" + spotifyPlId,
+	}})
 }
 
-func spotifyToYoutube(c *fiber.Ctx, playlistInfo *sessionPlaylist) error {
-	return nil
+func spotifyToYoutube(c *fiber.Ctx, playlistInfo *sessionPlaylist, sessionId string) error {
+	spTracks, getTracksErr := spotify.GetPlaylistTracks(playlistInfo.Id)
+	if getTracksErr != nil {
+		log.Println("spotifyToYoutube GetPlaylistTracks error", getTracksErr)
+
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	tracks := spotify.ToSearchTrackList(spTracks)
+
+	ytPlId, createErr := youtube.CreatePlaylist(playlistInfo.NewTitle, sessionId)
+
+	if createErr != nil {
+		log.Println("youtube.CreatePlaylist error", createErr)
+
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	addErr := youtube.AddTracksToPlaylist(ytPlId, tracks, sessionId)
+
+	if addErr != nil {
+		return c.SendStatus(fiber.StatusInternalServerError)
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(&ApiOkResponse{Data: map[string]interface{}{
+		"playlistUrl": "https://music.youtube.com/playlist?list=" + ytPlId,
+	}})
 }
 
 func startSession(c *fiber.Ctx, pl *sessionPlaylist) error {

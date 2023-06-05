@@ -57,12 +57,12 @@ type PlaylistResponse struct {
 }
 
 type PlaylistTracksResponse struct {
-	Items    []Item `json:"items"`
-	Limit    int    `json:"limit"`
-	Next     string `json:"next"`
-	Offset   int    `json:"offset"`
-	Previous string `json:"previous"`
-	Total    int    `json:"total"`
+	Items    []*Item `json:"items"`
+	Limit    int     `json:"limit"`
+	Next     string  `json:"next"`
+	Offset   int     `json:"offset"`
+	Previous string  `json:"previous"`
+	Total    int     `json:"total"`
 }
 
 var OauthConfig *oauth2.Config
@@ -168,6 +168,38 @@ func getClientToken() (string, error) {
 	}
 }
 
+func GetUserId(sessionId string) (string, error) {
+	cli := fiber.Client{}
+
+	token, tokenErr := getAuthCodeToken(sessionId)
+
+	if tokenErr != nil {
+		return "", tokenErr
+	}
+
+	res := cli.Get(spotifyBaseURL+"/me").
+		Set("Authorization", "Bearer "+token).Debug()
+
+	var bodyData struct {
+		Id string `json:"id"`
+	}
+
+	status, b, errs := res.Struct(&bodyData)
+
+	log.Println("spotify/me : ", string(b))
+
+	if errs != nil {
+		log.Panic(errs)
+		return "", errs[0]
+	}
+
+	if status == http.StatusOK {
+		return bodyData.Id, nil
+	}
+
+	return "", errors.New("error getting spotify user id | status code: " + fmt.Sprint(status))
+}
+
 // verify if spotify playlist exists
 func FindPlaylist(id string) (*PlaylistResponse, error) {
 	cli := fiber.Client{}
@@ -197,7 +229,7 @@ func FindPlaylist(id string) (*PlaylistResponse, error) {
 	return nil, errors.New("error verifying playlist | status code: " + fmt.Sprint(status))
 }
 
-func GetPlaylistTracks(id string) ([]Item, error) {
+func GetPlaylistTracks(id string) ([]*Item, error) {
 	cli := fiber.Client{}
 
 	token, _ := getClientToken()
@@ -249,7 +281,7 @@ func GetPlaylistTracks(id string) ([]Item, error) {
 	return tracks, nil
 }
 
-func ToSearchTrackList(tracks []*Item) *services.SearchTrackList {
+func ToSearchTrackList(tracks []*Item) services.SearchTrackList {
 	searchTrackList := make(services.SearchTrackList, 0, len(tracks))
 
 	for _, track := range tracks {
@@ -260,13 +292,13 @@ func ToSearchTrackList(tracks []*Item) *services.SearchTrackList {
 			Duration: int64(track.Track.Duration),
 		}
 
-		searchTrackList = append(searchTrackList, t)
+		searchTrackList = append(searchTrackList, &t)
 	}
 
-	return &searchTrackList
+	return searchTrackList
 }
 
-func SearchTrack(query string, artist string) (track *Track, found bool) {
+func SearchTrack(query string, artist string) (*Track, error) {
 	cli := fiber.Client{}
 
 	token, _ := getClientToken()
@@ -280,17 +312,17 @@ func SearchTrack(query string, artist string) (track *Track, found bool) {
 
 	status, _, errs := res.Struct(&bodyData)
 	if errs != nil {
-		log.Panic(errs)
+		return nil, errs[0]
 	}
 
 	if status == http.StatusOK && len(bodyData.Items) > 0 {
-		return &bodyData.Items[0].Track, true
+		return &bodyData.Items[0].Track, nil
 	}
 
-	return nil, false
+	return nil, errors.New("error searching track | status code: " + fmt.Sprint(status))
 }
 
-func CreatePlaylist(name string, userId string, sessionId string) (id *string, err []error) {
+func CreatePlaylist(name string, userId string, sessionId string) (id string, err []error) {
 	cli := fiber.Client{}
 
 	token, _ := getAuthCodeToken(sessionId)
@@ -316,13 +348,13 @@ func CreatePlaylist(name string, userId string, sessionId string) (id *string, e
 	}
 
 	if status == http.StatusCreated {
-		return &bodyData.Id, nil
+		return bodyData.Id, nil
 	}
 
 	return id, errs
 }
 
-func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, sessionId string) *string {
+func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, sessionId string) error {
 	cli := fiber.Client{}
 
 	token, _ := getAuthCodeToken(sessionId)
@@ -335,9 +367,14 @@ func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, ses
 			artist = track.Artists[0].Name
 		}
 
-		entry, found := SearchTrack(track.Title, artist)
+		entry, err := SearchTrack(track.Title, artist)
+		if err != nil {
+			log.Println("error searching track: ", err)
 
-		if found {
+			continue
+		}
+
+		if entry != nil {
 			uris += entry.Uri + ","
 		}
 	}
@@ -349,20 +386,16 @@ func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, ses
 	res := cli.Post(spotifyBaseURL+"/playlists/"+playlistId+"/tracks").Set("Authorization", "Bearer "+token).
 		JSON(body).Debug()
 
-	var bodyData struct {
-		SnapshotID string `json:"snapshot_id"`
-	}
-
-	status, _, errs := res.Struct(&bodyData)
+	status, _, errs := res.Bytes()
 
 	if errs != nil {
 		log.Panic(errs)
-		return nil
+		return errs[0]
 	}
 
 	if status == http.StatusCreated {
-		return &bodyData.SnapshotID
+		return nil
 	}
 
-	return nil
+	return errors.New("error adding tracks to playlist | status code: " + fmt.Sprint(status))
 }
