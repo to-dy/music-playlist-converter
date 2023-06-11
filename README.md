@@ -28,8 +28,6 @@ go mod tidy
 go run cmd/app/main.go
 ```
 
-<br />
-
 ## Flow
 
 ---
@@ -50,7 +48,7 @@ _verify playlist url -> authorize -> convert_
  Response: Temporary redirect to the Spotify authorization page.
 ```
 
-- #### GET /api/auth/spotify_callback
+- #### `GET /api/auth/spotify_callback`
 
 ```
 Description: Callback endpoint for Spotify authentication.
@@ -58,7 +56,7 @@ Status: 302
 Response: Redirect to the UI
 ```
 
-- #### GET /api/auth/youtube
+- #### `GET /api/auth/youtube`
 
 ```
 Description: Initiates the authentication flow with YouTube.
@@ -66,7 +64,7 @@ Status: 307
 Response: Temporary redirect to the YouTube authorization page.
 ```
 
-- #### GET /api/auth/youtube_callback
+- #### `GET /api/auth/youtube_callback`
 
 ```
 Description: Callback endpoint for YouTube authentication.
@@ -74,7 +72,7 @@ Status: 302
 Response: Redirect to the UI
 ```
 
-- #### GET /api/playlist/verify
+- #### `GET /api/playlist/verify`
 
 ```
 Description: Verify if a playlist URL is valid.
@@ -100,7 +98,7 @@ Response: JSON data with verification result.
 }
 ```
 
-- #### GET /api/playlist/convert/preview
+- #### `GET /api/playlist/convert/preview`
 
 ```
 Description: Preview the playlist to be converted.
@@ -108,7 +106,7 @@ Session Required: Yes
 Response: JSON data containing the preview of the converted playlist.
 ```
 
-- #### POST /api/playlist/convert/start
+- #### `POST /api/playlist/convert/start`
 
 ```
 Description: Start the playlist conversion process.
@@ -118,7 +116,7 @@ Status: 201 Created
 Response Body: JSON data containing the new URL of the converted playlist or an error message.
 ```
 
-- #### GET /api/playlist/convert/start/stream
+- #### `GET /api/playlist/convert/start/stream`
 
 ```
 Description: Start the playlist conversion process and stream process.
@@ -130,15 +128,15 @@ Response Content-Type: text/stream
 **Example Response**
 
 ```text/stream
-event: create
-data:  {url: ""}
+event: info
+data:  "string"
 
-event: search
-data:  {"trackId": "string","status": "searching"}
+event: error
+data:  "string"
 
-event: convert
-data:  {"trackId": "string","status": "success"}
+event: track_search
+data:  "{"message": "string","track": "{trackObj}","status": "string","success":bool}"
 
 event: done
-data: {"status": "success"}
+data: {"message": "string", "info": "{"tracks_found": 0, "tracks_not_found": 0, "conversion_successful": bool}"}
 ```
