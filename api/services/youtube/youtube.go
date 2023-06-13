@@ -163,18 +163,23 @@ func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, ses
 			artist = track.Artists[0].Name
 		}
 
-		entry, found := YTMusic_SearchTrack(track.Title, artist)
+		entry, found, sErr := YTMusic_SearchTrack(track.Title, artist)
 
-		PlaylistItem := &youtube.PlaylistItem{
-			Snippet: &youtube.PlaylistItemSnippet{
-				ResourceId: &youtube.ResourceId{
-					VideoId: entry.YoutubeId,
-				},
-				Title: entry.Title,
-			},
+		if sErr != nil {
+			log.Println("error searching track", sErr)
+			return sErr
 		}
 
 		if found {
+			PlaylistItem := &youtube.PlaylistItem{
+				Snippet: &youtube.PlaylistItemSnippet{
+					ResourceId: &youtube.ResourceId{
+						VideoId: entry.YoutubeId,
+					},
+					Title: entry.Title,
+				},
+			}
+
 			call := youtubeService.PlaylistItems.Insert([]string{"snippet", "status"}, PlaylistItem)
 
 			call.Header().Add("Authorization", "Bearer "+token.AccessToken)
@@ -190,6 +195,37 @@ func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, ses
 			continue
 		}
 
+	}
+
+	return nil
+}
+
+func AddTrackToPlaylist(playlistId string, track *Music, sessionId string) error {
+	token, tokenErr := getAuthCodeToken(sessionId)
+
+	if tokenErr != nil {
+		log.Println(tokenErr)
+		return tokenErr
+	}
+
+	PlaylistItem := &youtube.PlaylistItem{
+		Snippet: &youtube.PlaylistItemSnippet{
+			ResourceId: &youtube.ResourceId{
+				VideoId: track.YoutubeId,
+			},
+			Title: track.Title,
+		},
+	}
+
+	call := youtubeService.PlaylistItems.Insert([]string{"snippet", "status"}, PlaylistItem)
+
+	call.Header().Add("Authorization", "Bearer "+token.AccessToken)
+
+	_, err := call.Do()
+
+	if err != nil {
+		log.Println("error adding track to playlist", err)
+		return err
 	}
 
 	return nil

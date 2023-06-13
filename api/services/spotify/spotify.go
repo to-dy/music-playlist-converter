@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/oauth2"
@@ -298,7 +299,7 @@ func ToSearchTrackList(tracks []*Item) services.SearchTrackList {
 	return searchTrackList
 }
 
-func SearchTrack(query string, artist string) (*Track, error) {
+func SearchTrack(query string, artist string) (*Track, bool, error) {
 	cli := fiber.Client{}
 
 	token, _ := getClientToken()
@@ -312,14 +313,18 @@ func SearchTrack(query string, artist string) (*Track, error) {
 
 	status, _, errs := res.Struct(&bodyData)
 	if errs != nil {
-		return nil, errs[0]
+		return nil, false, errs[0]
 	}
 
-	if status == http.StatusOK && len(bodyData.Items) > 0 {
-		return &bodyData.Items[0].Track, nil
+	if status == http.StatusOK {
+		if len(bodyData.Items) > 0 {
+			return &bodyData.Items[0].Track, true, nil
+		}
+
+		return nil, false, errors.New("track not found")
 	}
 
-	return nil, errors.New("error searching track | status code: " + fmt.Sprint(status))
+	return nil, false, errors.New("error searching track | status code: " + fmt.Sprint(status))
 }
 
 func CreatePlaylist(name string, userId string, sessionId string) (id string, err []error) {
@@ -355,11 +360,7 @@ func CreatePlaylist(name string, userId string, sessionId string) (id string, er
 }
 
 func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, sessionId string) error {
-	cli := fiber.Client{}
-
-	token, _ := getAuthCodeToken(sessionId)
-
-	uris := ""
+	uris := []string{}
 
 	for _, track := range tracks {
 		artist := ""
@@ -367,7 +368,7 @@ func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, ses
 			artist = track.Artists[0].Name
 		}
 
-		entry, err := SearchTrack(track.Title, artist)
+		entry, _, err := SearchTrack(track.Title, artist)
 		if err != nil {
 			log.Println("error searching track: ", err)
 
@@ -375,12 +376,20 @@ func AddTracksToPlaylist(playlistId string, tracks services.SearchTrackList, ses
 		}
 
 		if entry != nil {
-			uris += entry.Uri + ","
+			uris = append(uris, entry.Uri)
 		}
 	}
 
+	return AddTracksToPlaylistByUris(playlistId, uris, sessionId)
+}
+
+func AddTracksToPlaylistByUris(playlistId string, uris []string, sessionId string) error {
+	cli := fiber.Client{}
+
+	token, _ := getAuthCodeToken(sessionId)
+
 	body := map[string]string{
-		"uris": uris,
+		"uris": strings.Join(uris, ","),
 	}
 
 	res := cli.Post(spotifyBaseURL+"/playlists/"+playlistId+"/tracks").Set("Authorization", "Bearer "+token).

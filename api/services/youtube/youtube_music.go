@@ -62,7 +62,7 @@ func generateBodyContext(data []bodyData) map[string]interface{} {
 	return body
 }
 
-func YTMusic_SearchTrack(query string, artist string) (*Music, bool) {
+func YTMusic_SearchTrack(query string, artist string) (*Music, bool, error) {
 	// search for track on youtube by provided query(artist + track)
 	cli := fiber.Client{}
 
@@ -82,7 +82,7 @@ func YTMusic_SearchTrack(query string, artist string) (*Music, bool) {
 
 	if errs != nil {
 		log.Panic(errs)
-		// return
+		return nil, false, errs[0]
 	}
 
 	music := parseSearchMusicsBody(&ytmRes)
@@ -98,8 +98,12 @@ func YTMusic_SearchTrack(query string, artist string) (*Music, bool) {
 
 	// log.Println("JSON data written to", filePath)
 
-	return music[0], len(music) > 0
+	if len(music) > 0 {
 
+		return music[0], true, nil
+	}
+
+	return nil, false, errors.New("track not found")
 }
 
 func YTMusic_GetPlaylistTracks(id string) ([]*Music, error) {

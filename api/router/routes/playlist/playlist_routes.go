@@ -16,4 +16,5 @@ func SetupPlaylistRoutes(router fiber.Router) {
 
 	playlistRouter.Post("/convert/start", handlers.ConvertPlaylist)
 
+	playlistRouter.Get("/convert/start/stream", handlers.StreamConvertPlaylist)
 }
